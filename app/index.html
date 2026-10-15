@@ -205,6 +205,10 @@ tr.hl td{background:var(--ac-d)}
 .note{font-size:12px;color:var(--mu);margin-top:10px;line-height:1.5}
 .warn{background:rgba(245,181,68,.09);border:1px solid rgba(245,181,68,.28);border-radius:12px;padding:10px 12px;font-size:13px}
 .foot{color:var(--mu2);font-size:11px;text-align:center;margin:26px 0 6px;line-height:1.6}
+.avviso{position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 10px);z-index:60;
+  max-width:576px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;
+  background:var(--ac);color:#06202a;font-weight:800;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.avviso span{flex:1}
 .load{display:grid;place-items:center;min-height:60vh;color:var(--mu);text-align:center;gap:10px}
 @media (prefers-reduced-motion:no-preference){
   .bar3 span,.big3 span,.mini span,.mix span{transition:width .6s cubic-bezier(.2,.8,.2,1)}
@@ -272,6 +276,7 @@ tr.hl td{background:var(--ac-d)}
 </div>
 
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="Scheda"></div>
+<button class="avviso" id="avviso" hidden><span>Nuova versione disponibile</span>Aggiorna</button>
 
 <nav class="nav" aria-label="Sezioni">
   <div class="in">
@@ -942,8 +947,28 @@ function preparaSimula(){
     vai("#sim/"+[comp,c,o].map(encodeURIComponent).join("/")); });
 }
 
-/* ---------------- PWA ---------------- */
-if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+/* ---------------- PWA: aggiornamento automatico ----------------
+   Quando pubblichiamo una nuova versione (app o dati) il telefono la prende da solo:
+   - all'apertura la pagina e i dati arrivano sempre freschi dal server (vedi sw.js);
+   - se l'app era rimasta aperta in sottofondo, quando torni a guardarla e ogni
+     30 minuti controlla se c'è qualcosa di nuovo e si ricarica;
+   - se stai leggendo una scheda non ti interrompe: compare un avviso da toccare. */
+function aggiornaOra(){
+  if(!$("sheet").hidden){ const a=$("avviso"); a.hidden=false; a.onclick=()=>location.reload(); return; }
+  location.reload(); }
+async function controllaNovita(reg){
+  if(reg) reg.update().catch(()=>{});
+  if(!D) return;
+  try{ const r=await fetch("data.json",{cache:"no-cache"}); if(!r.ok) return; const d=await r.json();
+    if(d.meta&&d.meta.gen!==D.meta.gen) aggiornaOra(); }catch(e){} }
+if("serviceWorker" in navigator) window.addEventListener("load",async()=>{
+  const giaControllata=!!navigator.serviceWorker.controller;
+  let reg=null; try{ reg=await navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}); }catch(e){}
+  let fatto=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{ if(!giaControllata||fatto) return; fatto=true; aggiornaOra(); });
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") controllaNovita(reg); });
+  setInterval(()=>{ if(document.visibilityState==="visible") controllaNovita(reg); },30*60*1000);
+});
 avvio();
 </script>
 </body>
