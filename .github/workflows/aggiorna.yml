@@ -1,0 +1,72 @@
+# Oracle Engine — aggiornamento automatico
+# Ogni mattina e ogni sera riscarica partite, calendari, risultati e allenatori,
+# ricalcola il modello e pubblica la nuova versione dell'app.
+name: Aggiorna Oracle Engine
+
+on:
+  schedule:
+    - cron: "30 4 * * *"    # ~06:30 in Italia: calendari e cambi panchina della notte
+    - cron: "30 22 * * *"   # ~00:30 in Italia: risultati e statistiche della giornata
+  workflow_dispatch:         # pulsante "Run workflow" per aggiornare subito
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # i dati delle stagioni passate restano in cache: ogni notte si scarica solo il nuovo
+      - uses: actions/cache@v4
+        with:
+          path: cache
+          key: dati-${{ github.run_id }}
+          restore-keys: dati-
+
+      - name: Costruisci l'app con i dati di oggi
+        env:
+          ORACLE_CACHE: cache
+        run: python build.py
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      # GitHub sospende i lavori pianificati dopo 60 giorni senza modifiche al progetto:
+      # una riga di registro a settimana lo tiene attivo
+      - name: Registro settimanale
+        if: github.event_name == 'schedule' && github.event.schedule == '30 4 * * *'
+        run: |
+          if [ "$(date +%u)" = "1" ]; then
+            date -u +"%Y-%m-%d %H:%M UTC" > ultimo_aggiornamento.txt
+            git config user.name "oracle-bot"
+            git config user.email "oracle-bot@users.noreply.github.com"
+            git add ultimo_aggiornamento.txt
+            git commit -m "Registro aggiornamento settimanale" || true
+            git push || true
+          fi
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

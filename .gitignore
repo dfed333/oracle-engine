@@ -1,0 +1,6 @@
+cache/
+cache_dati_calcio/
+dist/
+__pycache__/
+*.pyc
+app/index_v1_backup.html
