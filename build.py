@@ -24,6 +24,7 @@ sys.path.insert(0, QUI)
 import engine      # noqa: E402
 import modello     # noqa: E402
 import sorgenti    # noqa: E402
+import verifica    # noqa: E402
 
 DIST = os.path.join(QUI, "dist")
 APP = os.path.join(QUI, "app")
@@ -114,6 +115,20 @@ def main():
     extra = modello.medie_lega_extra(partite)
     mv = modello.medie_venue(partite)
 
+    log("    verifica sul passato e misura dell'incertezza…")
+    VER = verifica.riassunto_verifica(partite, leghe)
+    log(f"    {VER['n']} partite verificate · smorzamento gol {VER['gamma']} · favorito indovinato {VER['acc1x2']:.1%}")
+    # quante informazioni ha ogni squadra: campione effettivo (pesato) e partite di questa stagione
+    cod_corr = engine._codici_stagioni()[-1]
+    info = defaultdict(lambda: [0.0, 0.0, 0])
+    for m in partite:
+        w = engine.DECADIMENTO ** max(0.0, (oggi - m["data"]).days / 365.25)
+        for t in (m["casa"], m["ospite"]):
+            v = info[t]
+            v[0] += w; v[1] += w * w
+            if m.get("stagione") == cod_corr:
+                v[2] += 1
+
     log("7/7 scrivo dist/…")
     # ---- campionati ----
     L = {}
@@ -133,7 +148,8 @@ def main():
     CUP = {}
     for nome, b in B.items():
         d = dna_coppe.get(nome, {})
-        CUP[nome] = {"B": b, "rho": rho_c.get(nome, -0.05), "p1": d.get("p1"), "px": d.get("px"), "p2": d.get("p2"),
+        CUP[nome] = {"B": b, "rho": rho_c.get(nome, -0.05), "tot": r3(d.get("gc", 1.5) + d.get("gt", 1.2)),
+                     "p1": d.get("p1"), "px": d.get("px"), "p2": d.get("p2"),
                      "ov": d.get("ov"), "gg": d.get("gg"), "n": d.get("n"), "anni": d.get("anni")}
 
     # ---- squadre ----
@@ -154,6 +170,8 @@ def main():
              "p": [r3(prev["p"][k]) for k in modello.METRICHE], "pr": pr}
         if se.get("cor_stima"):
             q["cs"] = 1
+        v = info[t]
+        q["u"] = [round(v[0] ** 2 / v[1], 1) if v[1] else 0, v[2]]
         if coach:
             q["all"] = coach
             allenatori_attuali[coach] = t
@@ -213,7 +231,7 @@ def main():
             "allenatori": len(C), "squadre": len(Q),
         },
         "L": L, "CUP": CUP, "DEF": DEF, "Q": Q, "C": C, "F": finestra, "H": prec, "FO": FO, "CL": classif,
-        "D": derby, "STILI": engine.STYLES,
+        "D": derby, "STILI": engine.STYLES, "V": VER,
     }
 
     os.makedirs(DIST, exist_ok=True)

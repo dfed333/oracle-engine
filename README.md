@@ -6,11 +6,15 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
 ## Cosa fa
 
 - **Partite**: all'apertura trovi le partite di oggi (9 campionati + Champions,
-  Europa e Conference League), con le probabilità 1-X-2 e le stelline Top 3.
+  Europa e Conference League), con le probabilità 1-X-2, l'affidabilità di ogni partita e la stellina sulle partite da guardare.
 - **Scheda partita**: pronostico, gol, angoli, cartellini, tiri, allenatori,
   precedenti e forma. Per le partite giocate, le statistiche reali.
-- **Top 3**: le tre giocate del giorno con il segnale più forte, e la classifica
-  delle partite con più gol, angoli, cartellini o tiri attesi.
+- **Affidabilità**: ogni partita ha la sua percentuale. È la probabilità dell'uscita
+  principale (verificata sul passato) meno il margine d'incertezza di quella
+  partita (inizio stagione, allenatore nuovo, squadre viste solo in coppa).
+  Dal 65% in su la partita prende la stellina "Da guardare".
+- **Da guardare**: le partite con la stellina e il motivo, più la classifica delle
+  partite con più gol, angoli, cartellini o tiri attesi.
 - **Classifiche**: classifica della stagione e "DNA" di ogni campionato.
 - **Allenatori**: ricerca a tastiera e scheda con i numeri di carriera, squadra
   per squadra.
@@ -39,6 +43,10 @@ reali la sostengono (ponderazione per credibilità):
 
 Poi: forza dei campionati misurata sui risultati europei, stile di gioco degli
 allenatori, derby, precedenti (peso piccolo), assenze indicate dall'utente.
+Verifica sul passato (verifica.py): per ogni stagione dalla terza in poi il modello
+rifà i pronostici usando solo le partite precedenti e li confronta con i risultati
+veri (oltre 25.000 partite). Da qui lo smorzamento del totale gol (il modello grezzo
+esagera le partite "da tanti" o "da pochi" gol) e la correzione di Over/Under e Gol/No Gol.
 Gol: matrice Dixon-Coles esatta. Angoli e cartellini: 10.000 simulazioni
 Monte Carlo correlate al punteggio.
 
