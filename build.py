@@ -87,7 +87,12 @@ def main():
 
     log("3/7 statistiche allenatori e ponderazione per credibilità…")
     stats_all = modello.statistiche_allenatori(partite, storico)
-    base, previsione, carriera_tutta, R_res = modello.costruisci_parametri(partite, leghe, squadre_eng, storico)
+    seconde, det_sec = modello.forza_seconde(partite, leghe)
+    log("    forza seconde divisioni rispetto alla prima (squadre promosse/retrocesse):",
+        {k: f"{v} su {det_sec.get(k)} cambi di categoria" for k, v in seconde.items()})
+    lega_ora = {t: ultima[t][1] for t in ultima}
+    base, previsione, carriera_tutta, R_res = modello.costruisci_parametri(
+        partite, leghe, squadre_eng, storico, scala=seconde, lega_ora=lega_ora)
 
     cap, det_tr = modello.stima_trasferimento(partite, storico, R_res)
     modello.CAP_CAR.update(cap)
@@ -99,6 +104,12 @@ def main():
     lega_di = {t: ultima[t][1] for t in base if t in ultima}
     forza, solo, B = modello.forza_campionati(
         coppe, {t: {"att": base[t]["att"], "dif": base[t]["dif"]} for t in lega_di}, lega_di)
+
+    # le seconde divisioni non giocano le coppe: la loro forza è quella della prima divisione
+    # del paese moltiplicata per il fattore misurato sulle promosse/retrocesse
+    for d2, d1 in engine.SECONDE.items():
+        if d2 in seconde and d1 in forza:
+            forza[d2] = round(forza[d1] * seconde[d2], 3)
 
     def AD(t):
         if t in lega_di:

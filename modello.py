@@ -205,7 +205,50 @@ def medie_venue(partite):
     return out
 
 
-def rapporti_partite(partite, leghe, squadre_eng, mv):
+def forza_seconde(partite, leghe, minimo=15):
+    """
+    Quanto vale una seconda divisione rispetto alla prima dello stesso paese,
+    misurato sulle squadre promosse e retrocesse: come cambiano attacco e difesa
+    (rispetto alla media del campionato) quando cambiano categoria. Mettendo
+    insieme promosse e retrocesse l'effetto "fortuna dell'anno prima" si annulla.
+    Ritorna {seconda: fattore} con fattore < 1 (prima divisione = 1).
+    """
+    import math
+    st = defaultdict(lambda: [0, 0.0, 0.0])
+    for m in partite:
+        L = leghe[m["lega"]]
+        for t, f, s_, mf, ms in ((m["casa"], m["gc"], m["go"], L["gol_casa"], L["gol_trasferta"]),
+                                 (m["ospite"], m["go"], m["gc"], L["gol_trasferta"], L["gol_casa"])):
+            v = st[(t, m["lega"], m["stagione"])]
+            v[0] += 1; v[1] += f / mf; v[2] += s_ / ms
+    codici = engine._codici_stagioni()
+    out, dettagli = {}, {}
+    for d2, d1 in engine.SECONDE.items():
+        la, ld = [], []
+        for (t, l, c), v in st.items():
+            if l not in (d1, d2) or v[0] < minimo or c not in codici or codici.index(c) == 0:
+                continue
+            prima = codici[codici.index(c) - 1]
+            altra = d2 if l == d1 else d1
+            p = st.get((t, altra, prima))
+            if not p or p[0] < minimo:
+                continue
+            ora_a, ora_d, pr_a, pr_d = v[1] / v[0], v[2] / v[0], p[1] / p[0], p[2] / p[0]
+            if min(ora_a, ora_d, pr_a, pr_d) <= 0:
+                continue
+            # log(att in prima divisione / att in seconda) e idem per la difesa
+            if l == d1:
+                la.append(math.log(ora_a / pr_a)); ld.append(math.log(ora_d / pr_d))
+            else:
+                la.append(math.log(pr_a / ora_a)); ld.append(math.log(pr_d / ora_d))
+        if len(la) >= 6:
+            fatt = math.exp((sum(la) / len(la) - sum(ld) / len(ld)) / 2)
+            out[d2] = round(min(1.0, max(0.3, fatt)), 3)
+            dettagli[d2] = len(la)
+    return out, dettagli
+
+
+def rapporti_partite(partite, leghe, squadre_eng, mv, scala=None, lega_ora=None):
     """
     Per ogni partita e lato: rapporti rispetto alla media di lega, corretti per
     la forza dell'avversario (pass 1 = rating del motore).
@@ -241,6 +284,13 @@ def rapporti_partite(partite, leghe, squadre_eng, mv):
         else:
             for r in (rc, ro):
                 r["corF"] = r["corA"] = None
+        if scala and lega_ora:
+            for t, r in ((m["casa"], rc), (m["ospite"], ro)):
+                ora = lega_ora.get(t)
+                if ora and ora != m["lega"] and (m["lega"] in scala or ora in scala):
+                    k = scala.get(m["lega"], 1.0) / scala.get(ora, 1.0)
+                    r["att"] = _cl(r["att"] * k, 0, 4)
+                    r["dif"] = _cl(r["dif"] / k, 0, 4)
         out.append((m, m["casa"], rc))
         out.append((m, m["ospite"], ro))
     return out
@@ -269,10 +319,10 @@ class Somme:
 # EFFETTO ALLENATORE CON PONDERAZIONE PER CREDIBILITÀ
 # ==================================================================
 
-def costruisci_parametri(partite, leghe, squadre_eng, storico):
+def costruisci_parametri(partite, leghe, squadre_eng, storico, scala=None, lega_ora=None):
     oggi = datetime.date.today()
     mv = medie_venue(partite)
-    righe = rapporti_partite(partite, leghe, squadre_eng, mv)
+    righe = rapporti_partite(partite, leghe, squadre_eng, mv, scala, lega_ora)
 
     S_team = defaultdict(Somme)               # team -> somme di tutte le partite
     S_ct = defaultdict(Somme)                 # (coach, team) -> somme

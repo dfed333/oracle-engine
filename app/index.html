@@ -357,8 +357,8 @@ function stemma(n, s){ const c=colori(n), id="s"+(gid++), tx=lum(c[0])>.6?"#1522
   return '<svg width="'+s+'" height="'+Math.round(s*1.12)+'" viewBox="0 0 100 112" aria-hidden="true" style="flex:none"><defs><linearGradient id="'+id+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+c[0]+'"/><stop offset="1" stop-color="'+c[1]+'"/></linearGradient></defs><path d="M50 4 L92 16 V54 C92 82 73 100 50 108 C27 100 8 82 8 54 V16 Z" fill="url(#'+id+')" stroke="rgba(255,255,255,.35)" stroke-width="3"/><text x="50" y="66" text-anchor="middle" font-size="31" font-weight="800" fill="'+tx+'" font-family="system-ui">'+esc(sigla(n))+'</text></svg>'; }
 const COLORE_COMP = {"Serie A":"#2f7bf6","Premier League":"#a855f7","La Liga":"#f97316","Bundesliga":"#ef4444","Ligue 1":"#22c55e",
   "Primeira Liga":"#10b981","Eredivisie":"#fb923c","Pro League (Bel)":"#eab308","Süper Lig (Tur)":"#e11d48","Super League (Gre)":"#38bdf8",
-  "Premiership (Sco)":"#6366f1","Champions League":"#36d1e8","Europa League":"#f59e0b","Conference League":"#84cc16"};
-const NOME_COMP = {"Pro League (Bel)":"Pro League · Belgio","Süper Lig (Tur)":"Süper Lig · Turchia","Super League (Gre)":"Super League · Grecia","Premiership (Sco)":"Premiership · Scozia"};
+  "Premiership (Sco)":"#6366f1","Liga 2":"#fdba74","Ligue 2":"#86efac","Champions League":"#36d1e8","Europa League":"#f59e0b","Conference League":"#84cc16"};
+const NOME_COMP = {"Pro League (Bel)":"Pro League · Belgio","Süper Lig (Tur)":"Süper Lig · Turchia","Super League (Gre)":"Super League · Grecia","Premiership (Sco)":"Premiership · Scozia","Liga 2":"Liga 2 · Spagna","Ligue 2":"Ligue 2 · Francia"};
 const nomeComp = c => NOME_COMP[c] || c;
 
 /* ---------------- numeri casuali riproducibili ---------------- */
@@ -688,7 +688,7 @@ function adattaNomi(root){
     let fs=parseFloat(getComputedStyle(el).fontSize);
     while(el.scrollWidth>el.clientWidth+1&&fs>10.5){ fs-=.5; el.style.fontSize=fs+"px"; }
     if(el.scrollWidth>el.clientWidth+1) el.style.overflowWrap="anywhere"; }); }
-function ordineComp(set){ const ord=["Serie A","Champions League","Europa League","Conference League","Premier League","La Liga","Bundesliga","Ligue 1","Primeira Liga","Eredivisie","Pro League (Bel)","Süper Lig (Tur)","Super League (Gre)","Premiership (Sco)"];
+function ordineComp(set){ const ord=["Serie A","Champions League","Europa League","Conference League","Premier League","La Liga","Bundesliga","Ligue 1","Primeira Liga","Eredivisie","Pro League (Bel)","Süper Lig (Tur)","Super League (Gre)","Premiership (Sco)","Liga 2","Ligue 2"];
   return [...set].sort((a,b)=>(ord.indexOf(a)+99*(ord.indexOf(a)<0))-(ord.indexOf(b)+99*(ord.indexOf(b)<0))); }
 function cardPartita(f){
   const s=stato(f), r=calcola(f);

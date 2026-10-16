@@ -5,8 +5,8 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
 
 ## Cosa fa
 
-- **Partite**: all'apertura trovi le partite di oggi (9 campionati + Champions,
-  Europa e Conference League), con le probabilità 1-X-2, l'affidabilità di ogni partita e la stellina sulle partite da guardare.
+- **Partite**: all'apertura trovi le partite di oggi (11 campionati, Liga 2 e Ligue 2 +
+  Champions, Europa e Conference League), con le probabilità 1-X-2, l'affidabilità di ogni partita e la stellina sulle partite da guardare.
 - **Scheda partita**: pronostico, gol, angoli, cartellini, tiri, allenatori,
   precedenti e forma. Per le partite giocate, le statistiche reali.
 - **Affidabilità**: ogni partita ha la sua percentuale. È la probabilità dell'uscita
@@ -41,6 +41,8 @@ reali la sostengono (ponderazione per credibilità):
 3. **La carriera dell'allenatore altrove**: quanto cambia le sue squadre rispetto
    al loro standard, con un tetto (la rosa è diversa).
 
+Seconde divisioni (Liga 2, Ligue 2): la loro forza rispetto alla prima divisione è
+misurata sulle squadre promosse e retrocesse, così una neopromossa non sembra una big.
 Poi: forza dei campionati misurata sui risultati europei, stile di gioco degli
 allenatori, derby, precedenti (peso piccolo), assenze indicate dall'utente.
 Verifica sul passato (verifica.py): per ogni stagione dalla terza in poi il modello

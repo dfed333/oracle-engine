@@ -140,6 +140,9 @@ ALIAS_SQUADRE = {
     "oh leuven": "Oud-Heverlee Leuven", "bodrum": "Bodrumspor", "ael": "Larisa",
     "r racing club": "Racing Santander", "sport club freiburg": "Friburgo",
     "akhisarspor": "Akhisar Belediyespor",
+    "chamois niortais": "Niort", "sporting de gijon": "Sporting Gijón", "real sporting de gijon": "Sporting Gijón",
+    "stade malherbe caen": "Caen", "es troyes ac": "Troyes", "red star fc": "Red Star",
+    "celta fortuna": "Celta B", "stade lavallois mfc": "Laval", "stade lavallois": "Laval",
 }
 
 # varianti dello stesso nome per le squadre che giocano solo le coppe
@@ -240,6 +243,8 @@ PAGINE_WIKI = {
     "Süper Lig (Tur)": ["{s} Süper Lig"],
     "Super League (Gre)": ["{s} Super League Greece", "{s} Superleague Greece"],
     "Premiership (Sco)": ["{s} Scottish Premiership"],
+    "Liga 2": ["{s} Segunda División"],
+    "Ligue 2": ["{s} Ligue 2"],
 }
 
 _MESI = {m: i for i, m in enumerate(
@@ -457,6 +462,7 @@ LEGHE_CALENDARIO = {
     "Serie A": "serie-a", "Premier League": "epl", "La Liga": "la-liga", "Bundesliga": "bundesliga",
     "Ligue 1": "ligue-1", "Eredivisie": "eredivisie", "Primeira Liga": "primeira-liga",
     "Süper Lig (Tur)": "super-lig", "Premiership (Sco)": "scottish-premiership",
+    "Ligue 2": "ligue-2",
 }
 
 

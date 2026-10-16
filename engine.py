@@ -100,7 +100,12 @@ LEGHE_FD = {
     "T1":  "Süper Lig (Tur)",
     "G1":  "Super League (Gre)",
     "SC0": "Premiership (Sco)",
+    "SP2": "Liga 2",
+    "F2":  "Ligue 2",
 }
+
+# seconde divisioni e prima divisione dello stesso paese (per le squadre promosse/retrocesse)
+SECONDE = {"Liga 2": "La Liga", "Ligue 2": "Ligue 1"}
 
 # Traduzione nomi football-data → nomi canonici del simulatore
 FD_RENAME = {
@@ -131,6 +136,9 @@ FD_RENAME = {
     "St. Gilloise": "Union Saint-Gilloise", "Santander": "Racing Santander",
     "La Coruna": "Deportivo La Coruña", "Den Haag": "ADO Den Haag", "Zwolle": "PEC Zwolle",
     "RAAL La Louviere": "La Louvière", "Ad. Demirspor": "Adana Demirspor",
+    "Sp Gijon": "Sporting Gijón", "Cordoba": "Córdoba", "Cadiz": "Cádiz", "Malaga": "Málaga",
+    "Mirandes": "Mirandés", "Castellon": "Castellón", "Leganes": "Leganés", "Alcorcon": "Alcorcón",
+    "Nimes": "Nîmes", "Chateauroux": "Châteauroux", "Orleans": "Orléans", "Beziers": "Béziers",
 }
 
 # Parametro rho di Dixon-Coles per lega (più negativo = più 0-0 e 1-1)
@@ -139,6 +147,7 @@ RHO_LEGA = {
     "Bundesliga": -0.06, "Ligue 1": -0.10, "Primeira Liga": -0.11,
     "Eredivisie": -0.06, "Pro League (Bel)": -0.08, "Süper Lig (Tur)": -0.10,
     "Super League (Gre)": -0.12, "Premiership (Sco)": -0.09,
+    "Liga 2": -0.12, "Ligue 2": -0.11,
 }
 RHO_DEFAULT = -0.10
 
@@ -156,6 +165,8 @@ FALLBACK_LEGHE = {
     "Süper Lig (Tur)":    {"gol_casa": 1.55, "gol_trasferta": 1.25, "corner": 10.2, "cart": 5.3},
     "Super League (Gre)": {"gol_casa": 1.45, "gol_trasferta": 1.05, "corner": 9.5,  "cart": 5.6},
     "Premiership (Sco)":  {"gol_casa": 1.55, "gol_trasferta": 1.25, "corner": 10.0, "cart": 4.0},
+    "Liga 2":             {"gol_casa": 1.30, "gol_trasferta": 0.95, "corner": 9.4,  "cart": 5.2},
+    "Ligue 2":            {"gol_casa": 1.40, "gol_trasferta": 1.05, "corner": 9.5,  "cart": 4.4},
 }
 
 # ------------------------------------------------------------------
