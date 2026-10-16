@@ -204,6 +204,9 @@ class Nomi:
         corto, lungo = (q, c) if len(q) < len(c) else (c, q)
         if len(corto) >= 3 and lungo[:len(corto)] == corto:      # "Hakim Ben El Hadj" ↔ "Hakim Ben El Hadj Salem"
             return 2
+        if (len(corto) >= 2 and len(lungo) == len(corto) + 1 and corto[-1] == lungo[-1]   # "Halil Meler" ↔ "Halil Umut Meler":
+                and _stesso_nome(corto[0], lungo[0]) and set(corto) <= set(lungo)):      # manca al massimo un secondo nome
+            return 2
         if len(q) >= 2 and q[1:] == c[1:] and _stesso_nome(q[0], c[0]):     # "Sam Allison" ↔ "Samuel Allison"
             return 2
         if len(q) >= 3 and " ".join(c).startswith(" ".join(q[1:]) + " "):   # cognomi senza nome di battesimo
