@@ -4,3 +4,4 @@ dist/
 __pycache__/
 *.pyc
 app/index_v1_backup.html
+codici_privati.csv

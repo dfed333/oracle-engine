@@ -205,6 +205,23 @@ tr.hl td{background:var(--ac-d)}
 .note{font-size:12px;color:var(--mu);margin-top:10px;line-height:1.5}
 .warn{background:rgba(245,181,68,.09);border:1px solid rgba(245,181,68,.28);border-radius:12px;padding:10px 12px;font-size:13px}
 .foot{color:var(--mu2);font-size:11px;text-align:center;margin:26px 0 6px;line-height:1.6}
+.lock{position:relative;border-radius:14px;overflow:hidden;min-height:170px;margin-top:8px}
+.lock-c{filter:blur(7px);opacity:.45;pointer-events:none;user-select:none}
+.lock-o{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  text-align:center;padding:18px;background:linear-gradient(180deg,rgba(10,15,36,.1),rgba(10,15,36,.82) 60%)}
+.lock-o b{font-size:16px}
+.lock-o span{color:var(--mu);font-size:12.5px;max-width:34ch}
+.lucc{display:inline-block;vertical-align:-1px}
+.chiave{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:800;
+  background:var(--pick-d);color:var(--pick);border:1px solid rgba(245,181,68,.4)}
+.chiave.on{background:var(--ac-d);color:var(--ac);border-color:rgba(54,209,232,.45)}
+.modale{position:fixed;inset:0;z-index:80;background:rgba(4,7,18,.72);display:flex;align-items:flex-end;justify-content:center}
+.modale-c{width:100%;max-width:600px;background:var(--sf);border:1px solid var(--line2);border-radius:20px 20px 0 0;
+  padding:20px 18px calc(22px + env(safe-area-inset-bottom,0px))}
+.modale-c h2{font-family:var(--disp);font-size:24px;margin:0 0 6px}
+.modale-c ul{margin:8px 0 14px;padding-left:18px;color:#d5dcf5;font-size:13.5px;line-height:1.6}
+.msg-ok{color:var(--win);font-weight:700;font-size:13px;margin-top:8px}
+.msg-ko{color:var(--loss);font-weight:700;font-size:13px;margin-top:8px}
 .avviso{position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 10px);z-index:60;
   max-width:576px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;
   background:var(--ac);color:#06202a;font-weight:800;box-shadow:0 10px 30px rgba(0,0,0,.45)}
@@ -224,6 +241,7 @@ tr.hl td{background:var(--ac-d)}
       <svg width="30" height="33" viewBox="0 0 100 112" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#36d1e8"/><stop offset="1" stop-color="#9be15d"/></linearGradient></defs><path d="M50 4 L92 16 V54 C92 82 73 100 50 108 C27 100 8 82 8 54 V16 Z" fill="url(#lg)"/><text x="50" y="68" text-anchor="middle" font-size="40" font-weight="800" fill="#0a0f24" font-family="system-ui">OE</text></svg>
       <div><b>ORACLE</b><small id="fresh">caricamento dati…</small></div>
       <div class="sp"></div>
+      <button class="chiave" id="btn-chiave" hidden></button>
     </div>
   </header>
 
@@ -260,7 +278,7 @@ tr.hl td{background:var(--ac-d)}
   <section class="screen wrap" id="s-sim" aria-label="Simula" hidden>
     <h1 class="h1">Simula una partita</h1>
     <p class="lead">Per incroci che non sono in calendario: un'amichevole, una finale ipotetica, una sfida tra campionati diversi.</p>
-    <div class="card">
+    <div id="sim-wrap"><div class="card" id="sim-card">
       <label class="lb" for="sim-comp">Competizione</label>
       <select id="sim-comp"></select>
       <label class="lb" for="sim-c">Squadra di casa</label>
@@ -269,13 +287,14 @@ tr.hl td{background:var(--ac-d)}
       <div class="sug"><input type="search" id="sim-o" placeholder="es. Real Madrid" autocomplete="off"><div class="sug-list" id="sim-o-s" hidden></div></div>
       <div style="margin-top:14px"><button class="btn full" id="sim-go">Calcola il pronostico</button></div>
       <p class="note" id="sim-msg"></p>
-    </div>
+    </div></div>
   </section>
 
   <p class="foot">Modello probabilistico su dati reali: nessuna previsione è garantita.<br>Gioca responsabilmente · 18+</p>
 </div>
 
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="Scheda"></div>
+<div class="modale" id="sblocco" hidden role="dialog" aria-modal="true" aria-label="Sblocca la versione completa"><div class="modale-c" id="sblocco-c"></div></div>
 <button class="avviso" id="avviso" hidden><span>Nuova versione disponibile</span>Aggiorna</button>
 
 <nav class="nav" aria-label="Sezioni">
@@ -534,6 +553,61 @@ const dataIt = s => { if(!s) return ""; const p=s.split("-"); return p[2]+"/"+p[
 function stato(f){ if(f.r) return {cls:"fin",txt:"Finale"}; const t=Date.parse(f.t), n=Date.now();
   if(n<t) return {cls:"pre",txt:""}; if(n<t+2.2*3600e3) return {cls:"live",txt:"In corso"}; return {cls:"att",txt:"In attesa"}; }
 
+/* ---------------- ACCESSO: versione gratuita / completa ----------------
+   Protezione semplice (scelta concordata): i codici sono verificati sul telefono
+   confrontando la loro "impronta" con quelle pubblicate; chi ha un codice valido
+   vede tutto, gli altri vedono le parti avanzate sfocate. */
+const ACC={premium:false,admin:false};
+const LUCC='<svg class="lucc" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+async function impronta(t){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
+const normCodice=c=>(c||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+async function provaCodice(c){ if(!D.K||!D.K.h||!D.K.h.length||!window.crypto||!crypto.subtle||!normCodice(c)) return null;
+  const h=await impronta(D.K.sale+normCodice(c)); return D.K.h.includes(h)?(D.K.adm.includes(h)?"admin":"ok"):null; }
+function leggiCodice(){ try{ return localStorage.getItem("oe_codice"); }catch(e){ return null; } }
+function scriviCodice(c){ try{ if(c) localStorage.setItem("oe_codice",c); else localStorage.removeItem("oe_codice"); }catch(e){} }
+async function caricaAccesso(){
+  let c=leggiCodice(), daLink=false;
+  const m=location.hash.match(/sblocca=([A-Za-z0-9-]+)/);
+  if(m){ c=m[1]; daLink=true; history.replaceState(null,"",location.pathname+location.search+"#partite"); }
+  const v=c?await provaCodice(c):null;
+  if(v){ ACC.premium=true; ACC.admin=v==="admin"; scriviCodice(c); }
+  else if(c){ scriviCodice(null); }   // codice revocato o sbagliato: torna la versione gratuita
+  pulsanteChiave();
+  if(daLink) apriSblocco(v?"ok":"ko"); }
+function pulsanteChiave(){ const b=$("btn-chiave"); b.hidden=false;
+  b.className="chiave"+(ACC.premium?" on":""); b.innerHTML=ACC.premium?(ACC.admin?"Amministratore":"Versione completa"):LUCC+" Sblocca tutto";
+  b.onclick=()=>apriSblocco(); }
+function apriSblocco(esito){
+  const box=$("sblocco"), c=$("sblocco-c"), S=D.S||{};
+  if(ACC.premium){
+    c.innerHTML='<h2>'+(ACC.admin?"Accesso amministratore":"Versione completa attiva")+'</h2>'+(esito==="ok"?'<p class="msg-ok">Sbloccata. Ora vedi tutto.</p>':"")+
+      '<p class="note">Su questo telefono vedi tutte le analisi.'+(ACC.admin?" Per creare o togliere codici ad altre persone chiedilo a Claude.":"")+'</p>'+
+      '<div class="row" style="margin-top:14px"><button class="btn ghost grow" id="sb-esci">Disattiva su questo telefono</button><button class="btn grow" id="sb-chiudi">Chiudi</button></div>';
+  } else {
+    c.innerHTML='<h2>Sblocca la versione completa</h2>'+(esito==="ko"?'<p class="msg-ko">Il link contiene un codice non valido o non più attivo.</p>':"")+
+      '<ul><li>Affidabilità di ogni partita e stelline "Da guardare"</li><li>Le uscite più probabili e il perché, con i numeri</li><li>Schede Gol, Angoli, Cartellini e Tiri</li><li>Analisi degli allenatori e Simula</li></ul>'+
+      '<label class="lb" for="sb-codice">Hai un codice?</label><input type="text" id="sb-codice" placeholder="ORCL-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">'+
+      '<div id="sb-msg"></div>'+
+      '<div class="row" style="margin-top:12px"><button class="btn ghost grow" id="sb-chiudi">Chiudi</button><button class="btn grow" id="sb-ok">Sblocca</button></div>'+
+      (S.telegram?'<a class="btn ghost full" style="margin-top:10px;text-decoration:none" href="'+esc(S.telegram)+'" target="_blank" rel="noopener">Non hai un codice? Scrivici su Telegram</a>':'<p class="note">'+esc(S.testo_sblocco||"Chiedi il tuo codice a chi ti ha passato l'app.")+'</p>');
+  }
+  box.hidden=false;
+  const chiudiM=()=>{ box.hidden=true; };
+  $("sb-chiudi").onclick=chiudiM; box.onclick=ev=>{ if(ev.target===box) chiudiM(); };
+  if($("sb-esci")) $("sb-esci").onclick=()=>{ scriviCodice(null); location.reload(); };
+  if($("sb-ok")) $("sb-ok").onclick=async()=>{ const val=$("sb-codice").value, v=await provaCodice(val);
+    if(v){ scriviCodice(val); $("sb-msg").innerHTML='<p class="msg-ok">Codice valido: sblocco…</p>'; setTimeout(()=>location.reload(),500); }
+    else $("sb-msg").innerHTML='<p class="msg-ko">Codice non valido o non più attivo. Controlla di averlo scritto bene.</p>'; };
+}
+document.addEventListener("click",ev=>{ const t=ev.target.closest("[data-sblocca]"); if(t){ ev.preventDefault(); ev.stopPropagation(); apriSblocco(); } },true);
+/* contenuto avanzato: per chi non ha il codice resta sfocato, con i numeri mescolati */
+function premium(html,cosa){
+  if(ACC.premium) return html;
+  const mescolato=html.replace(/>([^<]*)</g,(m,t)=>">"+t.replace(/\d/g,()=>Math.floor(Math.random()*10))+"<");
+  return '<div class="lock"><div class="lock-c" aria-hidden="true">'+mescolato+'</div><div class="lock-o">'+
+    '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'+
+    '<b>'+esc(cosa)+'</b><span>Fa parte della versione completa.</span><button class="btn" data-sblocca>Sblocca tutto</button></div></div>'; }
+
 /* ---------------- avvio ---------------- */
 async function avvio(){
   try{ const r=await fetch("data.json",{cache:"no-cache"}); if(!r.ok) throw new Error(r.status); D=await r.json(); }
@@ -542,7 +616,9 @@ async function avvio(){
   $("fresh").textContent="Dati aggiornati "+g.getDate()+" "+MESI[g.getMonth()]+" · "+oraLoc(D.meta.gen);
   D.F.forEach((f,i)=>{ f.i=i; f.day=dkey(new Date(f.t)); });
   STATO.giorno=giornoIniziale();
+  await caricaAccesso();
   applicaOverride(); preparaAllenatori(); preparaSimula();
+  if(!ACC.premium){ const w=$("sim-wrap"); w.innerHTML=premium(w.innerHTML,"Simula qualsiasi partita"); }
   window.addEventListener("hashchange",router); router();
 }
 function giornoIniziale(){ const oggi=dkey(new Date()); const giorni=new Set(D.F.map(f=>f.day));
@@ -598,9 +674,10 @@ function schermoPartite(){
   preparaGiorno(giorno,()=>{ if(STATO.giorno!==giorno) return;
     for(const f of lst){ if(f.r||stato(f).cls!=="pre") continue; const r=calcola(f); if(!r.ok) continue; const a=affid(r);
       const card=$("lista").querySelector('.match[data-i="'+f.i+'"]'); if(!card) continue;
-      card.querySelector(".af-slot").innerHTML='<div class="af '+a.liv+'">affid. '+pct(a.val)+'</div>';
+      card.querySelector(".af-slot").innerHTML=ACC.premium?'<div class="af '+a.liv+'">affid. '+pct(a.val)+'</div>':'<div class="af">affid. '+LUCC+'</div>';
       if(a.liv==="alta"){ card.querySelector(".stella-slot").innerHTML='<div class="stella" aria-label="Partita da guardare">★</div>';
-        card.querySelector(".sig-slot").innerHTML='<div class="sig">★ Da guardare · <b>'+esc(a.pr.lab)+'</b><span class="v num">'+pct(a.val)+'</span></div>'; } } });
+        card.querySelector(".sig-slot").innerHTML=ACC.premium?'<div class="sig">★ Da guardare · <b>'+esc(a.pr.lab)+'</b><span class="v num">'+pct(a.val)+'</span></div>'
+          :'<div class="sig">★ Da guardare · <b>••••••••••</b><span class="v">'+LUCC+'</span></div>'; } } });
 }
 /* rimpicciolisce i nomi con parole troppo lunghe per la colonna (es. "Bournemouth") */
 function adattaNomi(root){
@@ -643,9 +720,11 @@ function schermoTop(){
   const scheda=x=>{ const f=x.r.f, a=x.a;
     return '<button class="match" data-i="'+f.i+'" style="padding:13px"><div class="row tiny muted" style="justify-content:space-between"><span>'+esc(nomeComp(f.comp))+'</span><span class="num">'+oraLoc(f.t)+'</span></div>'+
       '<div class="row" style="margin-top:8px">'+stemma(f.c,26)+'<b class="ell">'+esc(f.c)+'</b><span class="muted">vs</span><b class="ell">'+esc(f.o)+'</b>'+stemma(f.o,26)+'</div>'+
-      '<div class="sig"><span>'+(a.liv==="alta"?"★ ":"")+'<b>'+esc(a.pr.lab)+'</b></span><span class="v num">'+pct(a.val)+'</span></div>'+
-      '<ul class="why" style="margin-top:10px">'+motivoSegnale(x.r).slice(0,3).map(m=>'<li>'+m+'</li>').join("")+'</ul></button>'; };
-  $("top-list").innerHTML = (t.alte.length ? t.alte.map(scheda).join("")
+      (ACC.premium?'<div class="sig"><span>'+(a.liv==="alta"?"★ ":"")+'<b>'+esc(a.pr.lab)+'</b></span><span class="v num">'+pct(a.val)+'</span></div>'+
+      '<ul class="why" style="margin-top:10px">'+motivoSegnale(x.r).slice(0,3).map(m=>'<li>'+m+'</li>').join("")+'</ul>'
+      :'<div class="sig"><span>'+(a.liv==="alta"?"★ ":"")+'<b>••••••••••</b></span><span class="v">'+LUCC+'</span></div>')+'</button>'; };
+  $("top-list").innerHTML = (ACC.premium?"":'<div class="card" style="margin-bottom:10px"><b>Uscita, affidabilità e motivi sono nella versione completa.</b><p class="note">Qui vedi quali partite hanno la stellina; con il codice scopri quale uscita indicano e perché.</p><button class="btn full" style="margin-top:10px" data-sblocca>Sblocca tutto</button></div>')+
+    (t.alte.length ? t.alte.map(scheda).join("")
     : '<div class="empty"><b>Nessuna partita sopra la soglia</b>In questo giorno nessuna uscita supera il '+Math.round(SOGLIA_ALTA*100)+'% di affidabilità. Meglio nessun consiglio che uno debole.</div>')+
     (t.medie.length?'<div class="sec">Affidabilità media ('+Math.round(SOGLIA_MEDIA*100)+'–'+Math.round(SOGLIA_ALTA*100)+'%)</div>'+t.medie.slice(0,6).map(scheda).join(""):"");
   $("top-list").querySelectorAll(".match").forEach(b=>b.addEventListener("click",()=>vai("#m/"+b.dataset.i)));
@@ -655,8 +734,8 @@ function schermoTop(){
   const val=r=>({gol:r.lamC+r.lamO,pochi:-(r.lamC+r.lamO),angoli:r.stimati?-1:r.corC+r.corO,cart:r.stimati?-1:r.kar,tiri:r.tiri?r.tiri.c+r.tiri.o:-1})[STATO.rank];
   const fmt=r=>({gol:(r.lamC+r.lamO).toFixed(2)+" gol",pochi:(r.lamC+r.lamO).toFixed(2)+" gol",angoli:(r.corC+r.corO).toFixed(1)+" angoli",cart:r.kar.toFixed(1)+" cartellini",tiri:r.tiri?(r.tiri.c+r.tiri.o).toFixed(1)+" tiri":"—"})[STATO.rank];
   const lst=D.F.filter(f=>f.day===STATO.giorno&&!f.r).map(f=>calcola(f)).filter(r=>r.ok&&val(r)>=0||r.ok&&STATO.rank==="pochi").sort((a,b)=>val(b)-val(a)).slice(0,8);
-  $("rank-list").innerHTML = lst.length ? lst.map((r,i)=>'<button class="match" data-i="'+r.f.i+'" style="padding:10px 12px"><div class="row"><b class="disp num" style="width:20px;color:var(--mu)">'+(i+1)+'</b><span class="grow ell">'+esc(r.f.c)+' – '+esc(r.f.o)+'</span><b class="disp num" style="font-size:17px">'+fmt(r)+'</b></div></button>').join("")
-    : '<div class="empty">Nessuna partita da giocare in questo giorno.</div>';
+  $("rank-list").innerHTML = premium(lst.length ? lst.map((r,i)=>'<button class="match" data-i="'+r.f.i+'" style="padding:10px 12px"><div class="row"><b class="disp num" style="width:20px;color:var(--mu)">'+(i+1)+'</b><span class="grow ell">'+esc(r.f.c)+' – '+esc(r.f.o)+'</span><b class="disp num" style="font-size:17px">'+fmt(r)+'</b></div></button>').join("")
+    : '<div class="empty">Nessuna partita da giocare in questo giorno.</div>',"Classifica del giorno");
   $("rank-list").querySelectorAll(".match").forEach(b=>b.addEventListener("click",()=>vai("#m/"+b.dataset.i)));
 }
 function motivoSegnale(r){
@@ -726,7 +805,7 @@ function disegnaTab(f,opt){
   const r=conMC(calcola(f,opt)), p=$("pane"), b=r.base.L||{}, Lx=(D.L[lega(f.c)]||{}).x||{};
   if(TAB==="pron"){
     const a=affid(r), vs=verificaStorica(a.pr), col=a.liv==="alta"?"var(--pick)":(a.liv==="media"?"var(--ac)":"var(--mu2)");
-    let h='<div class="card" style="margin-top:8px;border-color:'+(a.liv==="alta"?"rgba(245,181,68,.45)":"var(--line)")+'">'+
+    const aff='<div class="card" style="margin-top:8px;border-color:'+(a.liv==="alta"?"rgba(245,181,68,.45)":"var(--line)")+'">'+
       '<div class="row"><div class="grow"><div class="tiny muted" style="font-weight:700;letter-spacing:1px;text-transform:uppercase">Affidabilità</div>'+
       '<div class="small" style="margin-top:3px">'+(a.liv==="alta"?"★ Da guardare: ":"")+'<b>'+esc(a.pr.lab)+'</b></div></div>'+
       '<div style="text-align:right"><div class="affv num" style="color:'+col+'">'+pct(a.val)+'</div><div class="tiny" style="color:'+col+';font-weight:700">'+a.liv+'</div></div></div>'+
@@ -736,20 +815,20 @@ function disegnaTab(f,opt){
       (vs?'<p class="note">Verifica sul passato: quando il modello ha dato a questo tipo di uscita una probabilità tra '+Math.round(vs.da*100)+'% e '+Math.round(vs.a*100)+'%, è uscita davvero nel <b>'+(vs.fr*100).toFixed(1).replace(".",",")+'%</b> dei casi ('+vs.n.toLocaleString("it-IT")+' partite delle stagioni '+D.V.stagioni[0]+' – '+D.V.stagioni[D.V.stagioni.length-1]+').</p>':"")+
       '<div class="sec" style="margin-top:12px">Risultati più probabili</div><div class="scores">'+r.celle.slice(0,3).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>'+
       '</div>';
-    h+='<div class="card" style="margin-top:10px"><div class="big3-l num"><span>'+esc(f.c)+'<b>'+pct(r.p1)+'</b></span><span class="x">Pareggio<b>'+pct(r.px)+'</b></span><span class="a">'+esc(f.o)+'<b>'+pct(r.p2)+'</b></span></div>'+
+    const uno='<div class="card" style="margin-top:10px"><div class="big3-l num"><span>'+esc(f.c)+'<b>'+pct(r.p1)+'</b></span><span class="x">Pareggio<b>'+pct(r.px)+'</b></span><span class="a">'+esc(f.o)+'<b>'+pct(r.p2)+'</b></span></div>'+
       '<div class="big3"><span style="width:'+pct(r.p1,1)+';background:var(--c1)"></span><span style="width:'+pct(r.px,1)+';background:var(--cx)"></span><span style="width:'+pct(r.p2,1)+';background:var(--c2)"></span></div>'+
       '<div class="row" style="margin-top:10px;justify-content:flex-end"><span class="tiny muted num">gol attesi '+r.lamC.toFixed(2)+' – '+r.lamO.toFixed(2)+'</span></div></div>';
-    h+='<div class="sec">Le 3 uscite più probabili</div><div class="picks">'+r.picks.slice(0,3).map((x,i)=>'<div class="pick"><span class="rk">'+(i+1)+'</span><span class="lbl">'+esc(x[0])+'</span><span class="pc num">'+pct(x[1])+'</span></div>').join("")+'</div>';
-    h+='<div class="sec">Probabilità chiave</div><div class="kgrid">'+
+    let resto='<div class="sec">Le 3 uscite più probabili</div><div class="picks">'+r.picks.slice(0,3).map((x,i)=>'<div class="pick"><span class="rk">'+(i+1)+'</span><span class="lbl">'+esc(x[0])+'</span><span class="pc num">'+pct(x[1])+'</span></div>').join("")+'</div>';
+    resto+='<div class="sec">Probabilità chiave</div><div class="kgrid">'+
       kp("Over 2.5 gol",r.o25*100,b.ov,v=>v.toFixed(0)+"%")+kp("Over 1.5 gol",r.ov[1.5]*100,r.base.tipo==="lega"?Lx.o15:null,v=>v.toFixed(0)+"%")+
       kp("Gol/Gol",r.ggc*100,b.gg,v=>v.toFixed(0)+"%")+kp("Gol attesi",r.lamC+r.lamO,r.base.tipo==="lega"?Lx.gol:null,v=>v.toFixed(2))+
       kp("Angoli attesi",r.corC+r.corO,r.base.tipo==="lega"?b.cor:null,v=>v.toFixed(1))+kp("Cartellini attesi",r.kar,r.base.tipo==="lega"?b.cart:null,v=>v.toFixed(1))+
       (r.tiri?kp("Tiri attesi",r.tiri.c+r.tiri.o,r.base.tipo==="lega"?Lx.t:null,v=>v.toFixed(1))+kp("Tiri in porta",r.tiri.pc+r.tiri.po,r.base.tipo==="lega"?Lx.p:null,v=>v.toFixed(1)):"")+'</div>'+
       '<p class="note">Il colore indica uno scarto di oltre il 10% dalla media '+(r.base.tipo==="coppa"?"della competizione":"del campionato")+'.</p>';
-    if(f.st){ h+='<div class="sec">Statistiche reali della partita</div><div class="card">'+statReali(f)+'</div>'; }
-    h+='<div class="sec">Perché questo pronostico</div><div class="card"><ul class="why">'+motivoSegnale(r).concat(perche(r).slice(1)).map(x=>'<li>'+x+'</li>').join("")+'</ul></div>';
-    h+='<div class="sec">Quanto pesa ogni dato</div><div class="card">'+pesi(r)+'</div>';
-    p.innerHTML=h;
+    const reali=f.st?'<div class="sec">Statistiche reali della partita</div><div class="card">'+statReali(f)+'</div>':"";
+    resto+='<div class="sec">Perché questo pronostico</div><div class="card"><ul class="why">'+motivoSegnale(r).concat(perche(r).slice(1)).map(x=>'<li>'+x+'</li>').join("")+'</ul></div>';
+    resto+='<div class="sec">Quanto pesa ogni dato</div><div class="card">'+pesi(r)+'</div>';
+    p.innerHTML=ACC.premium?aff+uno+reali+resto:uno+reali+premium(aff+resto,"Affidabilità, uscite più probabili e analisi");
   } else if(TAB==="gol"){
     let h='<div class="sec">Risultati esatti più probabili</div><div class="scores">'+r.celle.slice(0,9).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>';
     h+='<div class="sec">Over / Under</div><div class="card"><div class="tbl-w"><table class="num"><thead><tr><th>Linea</th><th>Over</th><th>Under</th></tr></thead><tbody>'+
@@ -757,24 +836,24 @@ function disegnaTab(f,opt){
     h+='<div class="sec">Gol per squadra</div><div class="kgrid">'+kp(esc(f.c),r.lamC,null,v=>v.toFixed(2))+kp(esc(f.o),r.lamO,null,v=>v.toFixed(2))+kp("Gol/Gol",r.ggc*100,b.gg,v=>v.toFixed(0)+"%")+kp("No Gol",(1-r.ggc)*100,b.gg!=null?100-b.gg:null,v=>v.toFixed(0)+"%")+'</div>';
     const xg=[[f.c,D.Q[f.c].t],[f.o,D.Q[f.o].t]].filter(x=>x[1]&&x[1].x!=null);
     if(xg.length) h+='<div class="sec">Expected goals stagione</div><div class="card">'+xg.map(([t,v])=>'<div class="row small" style="padding:4px 0"><span class="grow">'+esc(t)+'</span><span class="num">xG <b>'+v.x+'</b> fatti · <b>'+v.xs+'</b> concessi <span class="muted">('+v.nx+' partite)</span></span></div>').join("")+'<p class="note">Gli xG della stagione entrano nel calcolo: per le partite in cui la fonte li pubblica, il modello usa metà gol reali e metà xG, così un periodo fortunato o sfortunato pesa meno.</p></div>';
-    p.innerHTML=h;
+    p.innerHTML=premium(h,"Scheda Gol");
   } else if(TAB==="ang"){
-    p.innerHTML='<div class="sec">Angoli attesi</div><div class="kgrid">'+kp(esc(f.c),r.corC,null,v=>v.toFixed(1))+kp(esc(f.o),r.corO,null,v=>v.toFixed(1))+'</div>'+
+    p.innerHTML=premium('<div class="sec">Angoli attesi</div><div class="kgrid">'+kp(esc(f.c),r.corC,null,v=>v.toFixed(1))+kp(esc(f.o),r.corO,null,v=>v.toFixed(1))+'</div>'+
       '<div class="card" style="margin-top:8px"><div class="row"><span class="grow">Totale atteso</span><b class="disp num" style="font-size:22px">'+(r.corC+r.corO).toFixed(1)+'</b></div>'+(b.cor!=null&&r.base.tipo==="lega"?'<div class="tiny muted">media del campionato: '+b.cor.toFixed(1)+'</div>':"")+'</div>'+
       '<div class="sec">Linee</div><div class="card">'+tabLinee(r.corL)+'</div>'+
       '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"ang")+'</div>'+(r.stimati?'<p class="note warn">Per almeno una squadra gli angoli sono stimati: la fonte non pubblica i suoi dati.</p>':"")+
-      '<p class="note">10.000 simulazioni Monte Carlo: chi va sotto spinge e guadagna più angoli, le partite aperte ne producono di più.</p>';
+      '<p class="note">10.000 simulazioni Monte Carlo: chi va sotto spinge e guadagna più angoli, le partite aperte ne producono di più.</p>',"Scheda Angoli");
   } else if(TAB==="car"){
-    p.innerHTML='<div class="sec">Cartellini attesi</div><div class="card"><div class="row"><span class="grow">Totale atteso (gialli + rossi)</span><b class="disp num" style="font-size:22px">'+r.kar.toFixed(1)+'</b></div>'+(b.cart!=null&&r.base.tipo==="lega"?'<div class="tiny muted">media del campionato: '+b.cart.toFixed(1)+'</div>':"")+(r.der?'<div class="warn" style="margin-top:10px">È il <b>'+esc(r.der[0])+'</b>: nervosismo atteso +'+Math.round((r.der[1]-1)*100)+'%.</div>':"")+'</div>'+
+    p.innerHTML=premium('<div class="sec">Cartellini attesi</div><div class="card"><div class="row"><span class="grow">Totale atteso (gialli + rossi)</span><b class="disp num" style="font-size:22px">'+r.kar.toFixed(1)+'</b></div>'+(b.cart!=null&&r.base.tipo==="lega"?'<div class="tiny muted">media del campionato: '+b.cart.toFixed(1)+'</div>':"")+(r.der?'<div class="warn" style="margin-top:10px">È il <b>'+esc(r.der[0])+'</b>: nervosismo atteso +'+Math.round((r.der[1]-1)*100)+'%.</div>':"")+'</div>'+
       '<div class="sec">Linee</div><div class="card">'+tabLinee(r.karL)+'</div>'+
-      '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"car")+'</div>';
+      '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"car")+'</div>',"Scheda Cartellini");
   } else if(TAB==="tiri"){
-    p.innerHTML = r.tiri ? '<div class="sec">Tiri attesi</div><div class="kgrid">'+kp(esc(f.c),r.tiri.c,null,v=>v.toFixed(1))+kp(esc(f.o),r.tiri.o,null,v=>v.toFixed(1))+kp("In porta "+esc(f.c),r.tiri.pc,null,v=>v.toFixed(1))+kp("In porta "+esc(f.o),r.tiri.po,null,v=>v.toFixed(1))+'</div>'+
+    p.innerHTML = premium(r.tiri ? '<div class="sec">Tiri attesi</div><div class="kgrid">'+kp(esc(f.c),r.tiri.c,null,v=>v.toFixed(1))+kp(esc(f.o),r.tiri.o,null,v=>v.toFixed(1))+kp("In porta "+esc(f.c),r.tiri.pc,null,v=>v.toFixed(1))+kp("In porta "+esc(f.o),r.tiri.po,null,v=>v.toFixed(1))+'</div>'+
       '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"tiri")+'</div><p class="note">Tiri della squadra × tiri concessi dall\'avversaria, rapportati alla media del campionato.</p>'
-      : '<div class="empty">La fonte non pubblica i tiri per almeno una delle due squadre.</div>';
+      : '<div class="empty">La fonte non pubblica i tiri per almeno una delle due squadre.</div>',"Scheda Tiri");
   } else if(TAB==="all"){
-    p.innerHTML='<div class="stack" style="margin-top:8px">'+boxAllenatore(f,r,"C",opt)+boxAllenatore(f,r,"O",opt)+'</div>'+
-      '<div class="sec">Scontro di stili</div><div class="card small">'+esc(r.st_c)+' contro '+esc(r.st_o)+': coefficiente di attrito <b class="num">'+r.at.gol.toFixed(2)+'</b> — '+(r.at.gol>1.02?"partita che tende ad aprirsi":r.at.gol<.98?"partita che tende a bloccarsi":"ritmo nella norma")+'.</div>';
+    p.innerHTML=premium('<div class="stack" style="margin-top:8px">'+boxAllenatore(f,r,"C",opt)+boxAllenatore(f,r,"O",opt)+'</div>'+
+      '<div class="sec">Scontro di stili</div><div class="card small">'+esc(r.st_c)+' contro '+esc(r.st_o)+': coefficiente di attrito <b class="num">'+r.at.gol.toFixed(2)+'</b> — '+(r.at.gol>1.02?"partita che tende ad aprirsi":r.at.gol<.98?"partita che tende a bloccarsi":"ritmo nella norma")+'.</div>',"Analisi degli allenatori");
     p.querySelectorAll("[data-edit]").forEach(sel=>sel.addEventListener("change",()=>{ const o=Object.assign({},opt);
       const lato=sel.dataset.lato, k=sel.dataset.edit; let v=sel.value;
       if(k==="ass") o["ass"+lato]=+v; else if(k==="st") o["st"+lato]=v||undefined;
@@ -906,7 +985,7 @@ function schermoAllenatori(){
   $("all-leghe").innerHTML=leghe.map(l=>'<button class="chip" data-l="'+esc(l)+'" aria-pressed="'+(l===STATO.allLega)+'">'+esc(l==="Tutti"?"Tutti in carica":nomeComp(l))+'</button>').join("");
   $("all-leghe").querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{ STATO.allLega=b.dataset.l; schermoAllenatori(); }));
   const lst=IN_CARICA.filter(x=>STATO.allLega==="Tutti"||x.l===STATO.allLega);
-  $("all-list").innerHTML=lst.map(x=>{ const c=D.C[x.c]; return '<button class="match" data-n="'+esc(x.c)+'" style="padding:11px 12px"><div class="row">'+stemma(x.t,28)+'<div class="grow"><b>'+esc(x.c)+'</b><div class="tiny muted ell">'+esc(x.t)+' · '+esc(nomeComp(x.l))+(c&&c.st?' · '+esc(c.st):"")+'</div></div>'+(c&&c.n?'<div style="text-align:right" class="num"><b class="disp" style="font-size:18px">'+c.v+'%</b><div class="tiny muted">vittorie</div></div>':"")+'</div></button>'; }).join("")||'<div class="empty">Nessun allenatore.</div>';
+  $("all-list").innerHTML=lst.map(x=>{ const c=D.C[x.c]; return '<button class="match" data-n="'+esc(x.c)+'" style="padding:11px 12px"><div class="row">'+stemma(x.t,28)+'<div class="grow"><b>'+esc(x.c)+'</b><div class="tiny muted ell">'+esc(x.t)+' · '+esc(nomeComp(x.l))+(c&&c.st?' · '+esc(c.st):"")+'</div></div>'+(c&&c.n?(ACC.premium?'<div style="text-align:right" class="num"><b class="disp" style="font-size:18px">'+c.v+'%</b><div class="tiny muted">vittorie</div></div>':'<div class="tiny muted">'+LUCC+'</div>'):"")+'</div></button>'; }).join("")||'<div class="empty">Nessun allenatore.</div>';
   $("all-list").querySelectorAll("[data-n]").forEach(b=>b.addEventListener("click",()=>vai("#a/"+encodeURIComponent(b.dataset.n))));
 }
 function schedaAllenatore(nome){
@@ -918,12 +997,12 @@ function schedaAllenatore(nome){
     '<div class="hero" style="text-align:center"><div class="comp">'+(att?"In carica: "+esc(att.t):"Non in carica nei campionati coperti")+'</div><div class="h1" style="margin-top:6px">'+esc(nome)+'</div>'+
     '<div class="small muted">'+(c.st?"Identità di gioco: <b style=\"color:var(--tx)\">"+esc(c.st)+"</b>":"Identità di gioco non ancora classificata")+'</div>'+
     '<div class="small muted" style="margin-top:4px">'+c.n+' partite di campionato · dal '+dataIt(c.da)+' al '+dataIt(c.a)+'</div></div>'+
-    '<div class="sec">Numeri di carriera (partite di campionato)</div><div class="stat-g num">'+
+    premium('<div class="sec">Numeri di carriera (partite di campionato)</div><div class="stat-g num">'+
       [[c.v+"%","vittorie"],[c.x+"%","pareggi"],[c.s+"%","sconfitte"],[c.gf,"gol fatti"],[c.gs,"gol subiti"],[c.ov+"%","Over 2.5"],[c.gg+"%","Gol/Gol"],[c.cor!=null?c.cor:"—","angoli a favore"],[c.cor_s!=null?c.cor_s:"—","angoli concessi"],[c.gia!=null?c.gia:"—","gialli"],[c.ros!=null?c.ros:"—","rossi"],[c.tiri!=null?c.tiri:"—","tiri"]]
       .map(x=>'<div><b>'+x[0]+'</b><span>'+x[1]+'</span></div>').join("")+'</div>'+
     (c.xg!=null?'<p class="note">xG stagione in corso: '+c.xg+' prodotti, '+c.xg_s+' concessi a partita.</p>':"")+
     '<div class="sec">Squadra per squadra</div><div class="card" style="padding:6px 10px"><div class="tbl-w"><table class="num"><thead><tr><th style="text-align:left">Squadra</th><th>Partite</th><th>V%</th><th>Gol</th><th>Periodo</th></tr></thead><tbody>'+
-      c.squadre.map(x=>'<tr><td class="tn" style="text-align:left">'+esc(x[0])+'</td><td>'+x[1]+'</td><td>'+x[2]+'</td><td>'+x[5]+'–'+x[6]+'</td><td class="tiny">'+x[7].slice(0,4)+'–'+x[8].slice(0,4)+'</td></tr>').join("")+'</tbody></table></div></div>'+
+      c.squadre.map(x=>'<tr><td class="tn" style="text-align:left">'+esc(x[0])+'</td><td>'+x[1]+'</td><td>'+x[2]+'</td><td>'+x[5]+'–'+x[6]+'</td><td class="tiny">'+x[7].slice(0,4)+'–'+x[8].slice(0,4)+'</td></tr>').join("")+'</tbody></table></div></div>',"Numeri dell'allenatore")+
     '<p class="note">Fonte panchine: Wikipedia (tabelle cambi allenatore, 10 stagioni). Fonte partite: football-data.co.uk. Ogni partita è attribuita all\'allenatore in carica quel giorno; se non è certo chi fosse in panchina, la partita non viene contata.</p>'+
     '<p class="foot">Gioca responsabilmente · 18+</p></div></div>';
   $("bk").onclick=chiudi; }

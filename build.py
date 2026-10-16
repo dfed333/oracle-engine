@@ -222,6 +222,18 @@ def main():
     FO = {t: v for t, v in forma.items() if t in rilevanti}
     derby = [[*sorted(k), v[0], v[1]] for k, v in engine.DERBIES.items()]
 
+    # codici di sblocco (solo impronte) e impostazioni del canale
+    K = {"sale": "", "h": [], "adm": []}
+    if os.path.exists(os.path.join(QUI, "codici.json")):
+        with open(os.path.join(QUI, "codici.json"), encoding="utf-8") as f:
+            cj = json.load(f)
+        K = {"sale": cj["sale"], "h": [c["h"] for c in cj["codici"]],
+             "adm": [c["h"] for c in cj["codici"] if c.get("admin")]}
+    S = {}
+    if os.path.exists(os.path.join(QUI, "impostazioni.json")):
+        with open(os.path.join(QUI, "impostazioni.json"), encoding="utf-8") as f:
+            S = json.load(f)
+
     codici = engine._codici_stagioni()
     dati = {
         "meta": {
@@ -231,7 +243,7 @@ def main():
             "allenatori": len(C), "squadre": len(Q),
         },
         "L": L, "CUP": CUP, "DEF": DEF, "Q": Q, "C": C, "F": finestra, "H": prec, "FO": FO, "CL": classif,
-        "D": derby, "STILI": engine.STYLES, "V": VER,
+        "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S,
     }
 
     os.makedirs(DIST, exist_ok=True)
