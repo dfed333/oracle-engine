@@ -400,8 +400,8 @@ def _data(testo):
 
 def _pulisci_allenatore(testo):
     t = re.sub(r"\[[^\]]*\]", "", testo or "")
-    interim = bool(re.search(r"caretaker|interim|ad interim|\(c\)", t, re.I))
-    t = re.sub(r"\((caretaker|interim|ad interim|c)\)", "", t, flags=re.I)
+    interim = bool(re.search(r"caretaker|interim|ad int\.?|\(c\)", t, re.I))
+    t = re.sub(r"\((caretaker|interim|ad interim|ad int\.?|c)\)", "", t, flags=re.I)
     t = re.sub(r"\b(caretaker|interim)\b", "", t, flags=re.I)
     t = " ".join(t.replace("†", "").split()).strip(" ,;")
     if not t or norm(t) in ("tbd", "tba", "none", "vacant", "n a", "to be announced", "to be determined"):
@@ -424,6 +424,24 @@ def _col(intestazione, *parole):
     return None
 
 
+def _ripulisci(dati):
+    """Ripassa i nomi di una pagina già in cache dal filtro attuale dei nomi."""
+    personale = []
+    for sq, link, nome in dati.get("personale", []):
+        personale.append([sq, link, _pulisci_allenatore(nome)[0] if nome else nome])
+    cambi = []
+    for c in dati.get("cambi", []):
+        c = dict(c)
+        for k in ("uscente", "entrante"):
+            if c.get(k):
+                nome, interim = _pulisci_allenatore(c[k])
+                c[k] = nome
+                if k == "entrante" and interim:
+                    c["interim"] = True
+        cambi.append(c)
+    return {**dati, "personale": personale, "cambi": cambi}
+
+
 def leggi_pagina_wiki(lega, anno):
     """
     Ritorna {"personale": [(squadra, link, allenatore)], "cambi": [dict]} per la
@@ -434,7 +452,7 @@ def leggi_pagina_wiki(lega, anno):
     cache = _cartella("wiki2", f"{norm(lega).replace(' ', '_')}_{anno}.json")   # wiki2: lettura corretta delle intestazioni
     if os.path.exists(cache) and not (corrente and (time.time() - os.path.getmtime(cache)) / 3600 > 6):
         with open(cache, encoding="utf-8") as f:
-            return json.load(f)
+            return _ripulisci(json.load(f))
 
     html = None
     for modello in PAGINE_WIKI[lega]:
@@ -442,19 +460,29 @@ def leggi_pagina_wiki(lega, anno):
         url = ("https://en.wikipedia.org/w/api.php?action=parse&format=json&formatversion=2"
                "&prop=text&redirects=1&page=" + urllib.parse.quote(titolo))
         req = urllib.request.Request(url, headers={"User-Agent": UA})
-        dati = None
+        dati, motivo = None, ""
         for tentativo in range(5):
             try:
                 with urllib.request.urlopen(req, timeout=90) as r:
                     dati = json.loads(r.read().decode("utf-8"))
                 time.sleep(0.3)          # cortesia verso Wikipedia
-                break
-            except Exception:
-                time.sleep(3 + 4 * tentativo)
+                errore = (dati.get("error") or {}).get("code", "")
+                if "parse" in dati or errore == "missingtitle":
+                    break
+                motivo = errore or "risposta senza pagina"   # errore momentaneo (es. troppe richieste): si riprova
+            except Exception as e:
+                motivo = type(e).__name__
+            dati = None
+            time.sleep(3 + 4 * tentativo)
         if dati and "parse" in dati:
             html = dati["parse"]["text"]
             break
+        if dati is None:
+            print(f"    Wikipedia non risponde per «{titolo}» ({motivo})", flush=True)
     if html is None:
+        if os.path.exists(cache):        # meglio l'ultima copia buona che niente
+            with open(cache, encoding="utf-8") as f:
+                return _ripulisci(json.load(f))
         return {"personale": [], "cambi": [], "errore": True}
 
     p = _Tabelle()
