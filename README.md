@@ -47,6 +47,11 @@ Verifica sul passato (verifica.py): per ogni stagione dalla terza in poi il mode
 rifà i pronostici usando solo le partite precedenti e li confronta con i risultati
 veri (oltre 25.000 partite). Da qui lo smorzamento del totale gol (il modello grezzo
 esagera le partite "da tanti" o "da pochi" gol) e la correzione di Over/Under e Gol/No Gol.
+Taratura (taratura.py): partita per partita, come se il modello girasse ogni giorno,
+si sceglie la memoria che sbaglia meno. Risultato: le partite pesano la metà dopo
+un anno (non tre); il livello di gol delle coppe si stima con memoria di 8 mesi;
+la parte della carriera di un allenatore che si ripete in una squadra nuova è
+misurata sui cambi di panchina reali (circa il 10-20%) e ricalcolata a ogni aggiornamento.
 Gol: matrice Dixon-Coles esatta. Angoli e cartellini: 10.000 simulazioni
 Monte Carlo correlate al punteggio.
 

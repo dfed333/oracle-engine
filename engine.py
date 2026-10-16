@@ -74,7 +74,8 @@ MAX_GOL       = 9         # matrice punteggi 0..9 gol per squadra
 DISP_CORNER   = 9.0       # dispersione neg-binomiale corner
 DISP_CART     = 7.0       # dispersione neg-binomiale cartellini (varianza arbitrale)
 N_STAGIONI    = 10        # quante stagioni di storia scaricare
-DECADIMENTO   = 0.80      # peso temporale: una stagione fa ×0.8, dieci fa ×0.11
+DECADIMENTO   = 0.50      # peso temporale: una partita di un anno fa vale la metà di una di oggi
+                          # (scelto con la verifica sul passato in taratura.py: 1 anno batte 3 anni e 3 mesi)
 K_SHRINK      = 6.0       # regressione verso la media (partite "virtuali" neutre)
 CARTELLA_CACHE = os.environ.get("ORACLE_CACHE", "cache_dati_calcio")   # i CSV scaricati restano qui
 

@@ -87,7 +87,12 @@ def main():
 
     log("3/7 statistiche allenatori e ponderazione per credibilità…")
     stats_all = modello.statistiche_allenatori(partite, storico)
-    base, previsione, carriera_tutta, _ = modello.costruisci_parametri(partite, leghe, squadre_eng, storico)
+    base, previsione, carriera_tutta, R_res = modello.costruisci_parametri(partite, leghe, squadre_eng, storico)
+
+    cap, det_tr = modello.stima_trasferimento(partite, storico, R_res)
+    modello.CAP_CAR.update(cap)
+    log("    carriera allenatore che si ripete nella squadra nuova (dai dati):",
+        {k: f"{v['pendenza']:+.2f} su {v['casi']} cambi" for k, v in det_tr.items()})
 
     log("4/7 coppe europee e forza dei campionati…")
     coppe = sorgenti.partite_coppe(ab, anni)
@@ -107,6 +112,8 @@ def main():
     log("5/7 calendario e risultati della finestra…")
     finestra = sorgenti.partite_finestra(ab, partite)
     log("    partite in finestra:", len(finestra))
+
+    eu_all = modello.allenatori_in_coppa(coppe, storico)
 
     log("6/7 classifiche, forma, precedenti, tiri…")
     classif = modello.classifiche(partite)
@@ -145,10 +152,18 @@ def main():
     DEF = {k: r3(sum(l[k] for l in L.values()) / len(L)) for k in ("vcc", "vco", "vkc", "vko")}
 
     # ---- coppe ----
+    # livello di gol attuale di ogni coppa (stessa memoria corta usata per B): è il riferimento
+    # verso cui si smorzano i gol attesi, non la media di 10 anni
+    livello = defaultdict(lambda: [0.0, 0.0])
+    for m in coppe:
+        w = 0.5 ** (max(0, (oggi - m["data"]).days) / 240)
+        livello[m["comp"]][0] += w; livello[m["comp"]][1] += w * (m["gc"] + m["go"])
     CUP = {}
     for nome, b in B.items():
         d = dna_coppe.get(nome, {})
-        CUP[nome] = {"B": b, "rho": rho_c.get(nome, -0.05), "tot": r3(d.get("gc", 1.5) + d.get("gt", 1.2)),
+        lv = livello.get(nome)
+        tot_attuale = lv[1] / lv[0] if lv and lv[0] > 20 else d.get("gc", 1.5) + d.get("gt", 1.2)
+        CUP[nome] = {"B": b, "rho": rho_c.get(nome, -0.05), "tot": r3(tot_attuale),
                      "p1": d.get("p1"), "px": d.get("px"), "p2": d.get("p2"),
                      "ov": d.get("ov"), "gg": d.get("gg"), "n": d.get("n"), "anni": d.get("anni")}
 
@@ -209,6 +224,8 @@ def main():
         st = modello.stile_allenatore(nome)
         if st:
             s["st"] = st
+        if nome in eu_all:
+            s["eu"] = eu_all[nome]
         C[nome] = s
     for nome in allenatori_attuali:
         if nome not in C:
@@ -243,7 +260,7 @@ def main():
             "allenatori": len(C), "squadre": len(Q),
         },
         "L": L, "CUP": CUP, "DEF": DEF, "Q": Q, "C": C, "F": finestra, "H": prec, "FO": FO, "CL": classif,
-        "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S,
+        "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S, "CAP": modello.CAP_CAR,
     }
 
     os.makedirs(DIST, exist_ok=True)

@@ -32,8 +32,10 @@ PESO_XG = 0.5                    # quando ci sono gli xG: gol effettivi = metà 
 # partite (effettive) perché il dato allenatore-squadra valga quanto la base
 K_STINT = {"att": 25.0, "dif": 25.0, "corF": 12.0, "corA": 12.0, "cart": 15.0}
 K_CAR = 40.0                     # partite di carriera per avere la piena fiducia
-# quota massima dell'effetto-allenatore che si trasferisce da una squadra all'altra
-CAP_CAR = {"att": 0.35, "dif": 0.35, "corF": 0.60, "corA": 0.60, "cart": 0.50}
+# quota massima dell'effetto-allenatore che si trasferisce da una squadra all'altra.
+# Viene ricalcolata a ogni aggiornamento da stima_trasferimento() sui cambi di panchina reali;
+# questi sono solo i valori di partenza (misurati a ottobre 2026 su 397 cambi).
+CAP_CAR = {"att": 0.15, "dif": 0.05, "corF": 0.22, "corA": 0.31, "cart": 0.07}
 
 
 def _peso(d, oggi):
@@ -426,7 +428,46 @@ def statistiche_allenatori(partite, storico):
 # FORZA DEI CAMPIONATI DALLE COPPE EUROPEE
 # ==================================================================
 
-def forza_campionati(coppe, squadre, lega_di, k_lega=40.0, k_squadra=4.0, iterazioni=80):
+def stima_trasferimento(partite, storico, R, minimo=20):
+    """
+    Quanto l'effetto di un allenatore su una squadra si ripete nella squadra
+    successiva: regressione tra il residuo nella squadra A e quello nella B,
+    per ogni metrica, su tutti i cambi di panchina con almeno `minimo` partite.
+    Ritorna il tetto da usare (pendenza riportata al campione tipico) e i dettagli.
+    """
+    import math
+    inizio = {}
+    for m in partite:
+        for t in (m["casa"], m["ospite"]):
+            c = storico.allenatore(t, m["data"])
+            if c:
+                k = (norm(c), t)
+                if k not in inizio or m["data"] < inizio[k]:
+                    inizio[k] = m["data"]
+    cap, dettagli = {}, {}
+    for met in METRICHE:
+        xs, ys, ns = [], [], []
+        for ck, teams in R.items():
+            lst = sorted((inizio[(ck, t)], t, sm) for t, sm in teams.items()
+                         if sm.n >= minimo and sm.w[met] > 0 and (ck, t) in inizio)
+            for (_, _, a), (_, _, b) in zip(lst, lst[1:]):
+                xs.append(math.log(max(a.s[met] / a.w[met], 1e-3)))
+                ys.append(math.log(max(b.s[met] / b.w[met], 1e-3)))
+                ns.append(a.n)
+        if len(xs) < 30:
+            cap[met] = CAP_CAR[met]
+            continue
+        mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+        sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+        sxx = sum((x - mx) ** 2 for x in xs)
+        pend = max(0.0, sxy / sxx)
+        n_medio = sum(ns) / len(ns)
+        cap[met] = round(min(0.6, max(0.02, pend * (n_medio + K_CAR) / n_medio)), 3)
+        dettagli[met] = {"casi": len(xs), "pendenza": round(pend, 3), "partite_medie": round(n_medio)}
+    return cap, dettagli
+
+
+def forza_campionati(coppe, squadre, lega_di, k_lega=40.0, k_squadra=4.0, iterazioni=80, emivita_b=240):
     """
     gol_casa ~ B_comp × A_casa × D_ospite
       squadra di campionato: A = att × s_lega, D = dif / s_lega
@@ -499,6 +540,21 @@ def forza_campionati(coppe, squadre, lega_di, k_lega=40.0, k_squadra=4.0, iteraz
         for t in solo:
             solo[t] = [solo[t][0] / g, solo[t][1] * g]
 
+    # livello di gol di ogni coppa con memoria corta: le coppe cambiano in fretta (nuovo formato,
+    # stagioni da tanti gol). Verificato sul passato: 6-12 mesi battono 10 anni.
+    import math
+    xi = math.log(2) / emivita_b
+    for c in comps:
+        oh = ph = oa = pa = 0.0
+        for m, _ in righe:
+            if m["comp"] != c:
+                continue
+            w = math.exp(-xi * max(0, (oggi - m["data"]).days))
+            ac, dc = AD(m["casa"]); ao, do = AD(m["ospite"])
+            oh += w * m["gc"]; ph += w * ac * do
+            oa += w * m["go"]; pa += w * ao * dc
+        if ph and pa:
+            B[c] = [oh / ph, oa / pa]
     n_part = defaultdict(int)
     for m, _ in righe:
         for t in (m["casa"], m["ospite"]):
@@ -511,6 +567,24 @@ def forza_campionati(coppe, squadre, lega_di, k_lega=40.0, k_squadra=4.0, iteraz
 # ==================================================================
 # CLASSIFICHE, FORMA, PRECEDENTI, TIRI
 # ==================================================================
+
+def allenatori_in_coppa(coppe, storico):
+    """Rendimento in Europa di ogni allenatore (solo squadre dei campionati coperti)."""
+    acc = defaultdict(lambda: [0, 0, 0, 0, 0, 0])   # n, v, x, gf, gs, nomi
+    nomi = {}
+    for m in coppe:
+        for lato in ("c", "o"):
+            team = m["casa"] if lato == "c" else m["ospite"]
+            c = storico.allenatore(team, m["data"]) if team in storico.seg else None
+            if not c:
+                continue
+            gf, gs = (m["gc"], m["go"]) if lato == "c" else (m["go"], m["gc"])
+            a = acc[norm(c)]
+            a[0] += 1; a[1] += gf > gs; a[2] += gf == gs; a[3] += gf; a[4] += gs
+            nomi[norm(c)] = c
+    return {nomi[k]: [a[0], round(100 * a[1] / a[0], 1), round(100 * a[2] / a[0], 1), round(a[3] / a[0], 2), round(a[4] / a[0], 2)]
+            for k, a in acc.items() if a[0] >= 4}
+
 
 def classifiche(partite):
     cod = engine._codici_stagioni()[-1]

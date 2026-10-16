@@ -320,7 +320,7 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const pct = (p, d = 0) => (100 * p).toFixed(d) + "%";
 const M = ["att", "dif", "corF", "corA", "cart"];
-const K_CAR = 40, CAP = {att: .35, dif: .35, corF: .6, corA: .6, cart: .5};
+const K_CAR = 40, CAP = {att: .15, dif: .05, corF: .22, corA: .31, cart: .07};   // aggiornato da data.json (misurato sui cambi di panchina)
 let D = null;                      // dati
 const STATO = {giorno: null, comp: "Tutte", lega: null, rank: "gol", allLega: "Tutti"};
 const CACHE = new Map();           // calcoli per partita
@@ -512,6 +512,8 @@ function affid(r){
   if(nst<10) motivi.push("inizio stagione: "+nst+" partite di campionato giocate");
   motivi.push(...uc.mot,...uo.mot);
   return (r.af={val,liv,pr,margine,motivi}); }
+function fasceGol(P){ const f=[0,0,0,0,0,0]; for(let i=0;i<11;i++) for(let j=0;j<11;j++) f[Math.min(i+j,5)]+=P[i][j]; return f; }
+function notaEsatti(){ return D.V&&D.V.esatto3?'<p class="note">Il risultato esatto è il pronostico più difficile: sulle '+D.V.n.toLocaleString("it-IT")+' partite della verifica il modello l\'ha messo tra i primi 3 il '+(100*D.V.esatto3).toFixed(0)+'% delle volte. Le fasce di gol qui sotto sono molto più affidabili.</p>':""; }
 function verificaStorica(pr){ const t=D.V&&D.V.tab&&D.V.tab[pr.key]; if(!t) return null;
   for(const x of t) if(pr.praw>=x[0]&&pr.praw<x[0]+.05) return {da:x[0],a:x[0]+.05,n:x[1],fr:x[2]}; return null; }
 
@@ -617,6 +619,7 @@ async function avvio(){
   D.F.forEach((f,i)=>{ f.i=i; f.day=dkey(new Date(f.t)); });
   STATO.giorno=giornoIniziale();
   await caricaAccesso();
+  if(D.CAP) Object.assign(CAP,D.CAP);
   applicaOverride(); preparaAllenatori(); preparaSimula();
   if(!ACC.premium){ const w=$("sim-wrap"); w.innerHTML=premium(w.innerHTML,"Simula qualsiasi partita"); }
   window.addEventListener("hashchange",router); router();
@@ -797,6 +800,11 @@ function renderScheda(f,opt){
   disegnaTab(f,opt);
 }
 
+function barreFasce(r){ const f=fasceGol(r.P), lab=["0","1","2","3","4","5+"], mx=Math.max(...f);
+  const multi=f[2]+f[3]+f[4];
+  return '<div class="sec" style="margin-top:12px">Quanti gol in totale</div>'+
+    f.map((v,i)=>'<div class="row small" style="margin:4px 0"><span class="num" style="width:26px;font-weight:700">'+lab[i]+'</span><div class="bar" style="flex:1;height:14px;background:var(--sf3);border-radius:6px;overflow:hidden"><span style="display:block;height:100%;width:'+(100*v/mx).toFixed(1)+'%;background:var(--ac);opacity:'+(.35+.65*v/mx).toFixed(2)+'"></span></div><span class="num" style="width:46px;text-align:right;font-weight:700">'+pct(v)+'</span></div>').join("")+
+    '<p class="note">Multigol 2-4: <b>'+pct(multi)+'</b> · almeno 3 gol: <b>'+pct(f[3]+f[4]+f[5])+'</b> · gol attesi in totale '+(r.lamC+r.lamO).toFixed(2)+'.</p>'; }
 function kp(k,v,lg,fmt,dir){ const d=lg==null?null:(v-lg)/Math.max(lg,1e-9);
   const cls=d==null||Math.abs(d)<.1?"":(d>0?"up":"dn");
   return '<div class="kp"><div class="k">'+k+'</div><div class="v num '+cls+'">'+fmt(v)+'</div>'+(lg!=null?'<div class="lg">media '+(dir||"lega")+': <b>'+fmt(lg)+'</b></div>':'<div class="lg">&nbsp;</div>')+'</div>'; }
@@ -814,7 +822,7 @@ function disegnaTab(f,opt){
       (a.motivi.length?' Il margine dipende da: '+a.motivi.map(esc).join(" · ")+'.':' Dati abbondanti e stabili su entrambe le squadre.')+'</p>'+
       (vs?'<p class="note">Verifica sul passato: quando il modello ha dato a questo tipo di uscita una probabilità tra '+Math.round(vs.da*100)+'% e '+Math.round(vs.a*100)+'%, è uscita davvero nel <b>'+(vs.fr*100).toFixed(1).replace(".",",")+'%</b> dei casi ('+vs.n.toLocaleString("it-IT")+' partite delle stagioni '+D.V.stagioni[0]+' – '+D.V.stagioni[D.V.stagioni.length-1]+').</p>':"")+
       '<div class="sec" style="margin-top:12px">Risultati più probabili</div><div class="scores">'+r.celle.slice(0,3).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>'+
-      '</div>';
+      notaEsatti()+barreFasce(r)+'</div>';
     const uno='<div class="card" style="margin-top:10px"><div class="big3-l num"><span>'+esc(f.c)+'<b>'+pct(r.p1)+'</b></span><span class="x">Pareggio<b>'+pct(r.px)+'</b></span><span class="a">'+esc(f.o)+'<b>'+pct(r.p2)+'</b></span></div>'+
       '<div class="big3"><span style="width:'+pct(r.p1,1)+';background:var(--c1)"></span><span style="width:'+pct(r.px,1)+';background:var(--cx)"></span><span style="width:'+pct(r.p2,1)+';background:var(--c2)"></span></div>'+
       '<div class="row" style="margin-top:10px;justify-content:flex-end"><span class="tiny muted num">gol attesi '+r.lamC.toFixed(2)+' – '+r.lamO.toFixed(2)+'</span></div></div>';
@@ -830,7 +838,7 @@ function disegnaTab(f,opt){
     resto+='<div class="sec">Quanto pesa ogni dato</div><div class="card">'+pesi(r)+'</div>';
     p.innerHTML=ACC.premium?aff+uno+reali+resto:uno+reali+premium(aff+resto,"Affidabilità, uscite più probabili e analisi");
   } else if(TAB==="gol"){
-    let h='<div class="sec">Risultati esatti più probabili</div><div class="scores">'+r.celle.slice(0,9).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>';
+    let h='<div class="sec">Risultati esatti più probabili</div><div class="scores">'+r.celle.slice(0,9).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>'+notaEsatti()+'<div class="card" style="margin-top:8px">'+barreFasce(r)+'</div>';
     h+='<div class="sec">Over / Under</div><div class="card"><div class="tbl-w"><table class="num"><thead><tr><th>Linea</th><th>Over</th><th>Under</th></tr></thead><tbody>'+
       [.5,1.5,2.5,3.5,4.5].map(L=>{ const o=L===2.5?r.o25:r.ov[L]; return '<tr'+(L===2.5?' class="hl"':"")+'><td>'+L+'</td><td>'+pct(o,1)+'</td><td>'+pct(1-o,1)+'</td></tr>'; }).join("")+'</tbody></table></div></div>';
     h+='<div class="sec">Gol per squadra</div><div class="kgrid">'+kp(esc(f.c),r.lamC,null,v=>v.toFixed(2))+kp(esc(f.o),r.lamO,null,v=>v.toFixed(2))+kp("Gol/Gol",r.ggc*100,b.gg,v=>v.toFixed(0)+"%")+kp("No Gol",(1-r.ggc)*100,b.gg!=null?100-b.gg:null,v=>v.toFixed(0)+"%")+'</div>';
@@ -926,7 +934,7 @@ function pesi(r){
     righe.push('<div style="margin-bottom:12px"><div class="row small"><b class="grow ell">'+esc(t)+'</b><span class="muted tiny">gol</span></div>'+
       '<div class="mix"><span style="width:'+pct(base,1)+';background:#5d6a8f"></span><span style="width:'+pct(qui,1)+';background:var(--ac)"></span><span style="width:'+pct(car,1)+';background:var(--pick)"></span></div>'+
       '<div class="mix-l num"><span><i style="background:#5d6a8f"></i>Storia squadra '+pct(base)+'</span><span><i style="background:var(--ac)"></i>'+esc(coach||"allenatore")+' qui '+pct(qui)+'</span><span><i style="background:var(--pick)"></i>Sua carriera '+pct(car)+'</span></div></div>'); }
-  return righe.join("")+'<p class="note">Più partite ha un allenatore sulla panchina attuale, più il suo dato pesa. Con poche partite il modello si appoggia alla storia della squadra (10 anni pesati) e, se è appena arrivato, a come hanno giocato le sue squadre precedenti.</p>'; }
+  return righe.join("")+'<p class="note">Più partite ha un allenatore sulla panchina attuale, più il suo dato pesa. La sua carriera altrove conta poco per scelta dei dati: su centinaia di cambi di panchina reali, l\'effetto di un allenatore su una squadra si è ripetuto nella successiva solo in piccola parte (più sugli angoli che sui gol).</p>'; }
 
 function boxAllenatore(f,r,lato,opt){
   const t=lato==="C"?f.c:f.o, q=D.Q[t], coach=lato==="C"?r.all_c:r.all_o, st=lato==="C"?r.st_c:r.st_o;
@@ -938,6 +946,7 @@ function boxAllenatore(f,r,lato,opt){
   const corr = q.mod&&!provvisorio ? '<div class="warn" style="margin-top:10px">Allenatore impostato da te. Secondo i dati ufficiali è <b>'+esc(q._uff||"non noto")+'</b>: quando cambieranno, la tua correzione si toglierà da sola. <button class="pill" style="margin-left:4px" data-ripristina="'+lato+'">Ripristina</button></div>' : "";
   return '<div class="coach"><div class="row">'+stemma(t,30)+'<div class="grow"><div class="tiny muted">'+esc(t)+'</div><h3>'+esc(coach||"Allenatore non noto")+'</h3>'+(q.nota&&!q.mod&&!opt["all"+lato]?'<div class="tiny" style="color:var(--pick)">'+esc(q.nota)+'</div>':"")+'</div>'+(coach?'<button class="pill" onclick="vai(\'#a/'+encodeURIComponent(coach)+'\')">Scheda</button>':"")+'</div>'+
     (c&&c.n?'<div class="stat-g num"><div><b>'+c.n+'</b><span>partite in carriera</span></div><div><b>'+c.v+'%</b><span>vittorie</span></div><div><b>'+c.gf+'</b><span>gol fatti</span></div><div><b>'+c.ov+'%</b><span>Over 2.5</span></div><div><b>'+(c.cor!=null?c.cor:"—")+'</b><span>angoli</span></div><div><b>'+(c.gia!=null?c.gia:"—")+'</b><span>gialli</span></div></div>':"")+
+    (c&&c.eu?'<p class="note">In coppa europea: <b>'+c.eu[0]+'</b> partite, '+c.eu[1]+'% vittorie, '+c.eu[3]+' gol fatti e '+c.eu[4]+' subiti a partita.</p>':"")+
     (per?'<p class="note">Qui a '+esc(t)+': <b>'+per[1]+'</b> partite ('+per[2]+'% vittorie, '+per[5]+' gol fatti e '+per[6]+' subiti a partita)'+(q.dal&&coach===q.all?', in carica dal '+dataIt(q.dal):"")+'.</p>':(coach?'<p class="note">Nessuna partita di '+esc(coach)+' con '+esc(t)+' nell\'archivio: il modello usa la sua carriera altrove.</p>':""))+
     '<label class="lb">Cambia allenatore (scrivi per cercare)</label><div class="sug"><input type="search" data-cerca="'+lato+'" placeholder="es. “con” → Antonio Conte" autocomplete="off"><div class="sug-list" hidden></div></div>'+
     '<div class="row" style="gap:8px"><div class="grow"><label class="lb">Identità di gioco</label><select data-edit="st" data-lato="'+lato+'">'+stili+'</select></div>'+
@@ -1001,6 +1010,7 @@ function schedaAllenatore(nome){
       [[c.v+"%","vittorie"],[c.x+"%","pareggi"],[c.s+"%","sconfitte"],[c.gf,"gol fatti"],[c.gs,"gol subiti"],[c.ov+"%","Over 2.5"],[c.gg+"%","Gol/Gol"],[c.cor!=null?c.cor:"—","angoli a favore"],[c.cor_s!=null?c.cor_s:"—","angoli concessi"],[c.gia!=null?c.gia:"—","gialli"],[c.ros!=null?c.ros:"—","rossi"],[c.tiri!=null?c.tiri:"—","tiri"]]
       .map(x=>'<div><b>'+x[0]+'</b><span>'+x[1]+'</span></div>').join("")+'</div>'+
     (c.xg!=null?'<p class="note">xG stagione in corso: '+c.xg+' prodotti, '+c.xg_s+' concessi a partita.</p>':"")+
+    (c.eu?'<p class="note">In coppa europea: <b>'+c.eu[0]+'</b> partite, '+c.eu[1]+'% vittorie, '+c.eu[2]+'% pareggi, '+c.eu[3]+' gol fatti e '+c.eu[4]+' subiti a partita.</p>':"")+
     '<div class="sec">Squadra per squadra</div><div class="card" style="padding:6px 10px"><div class="tbl-w"><table class="num"><thead><tr><th style="text-align:left">Squadra</th><th>Partite</th><th>V%</th><th>Gol</th><th>Periodo</th></tr></thead><tbody>'+
       c.squadre.map(x=>'<tr><td class="tn" style="text-align:left">'+esc(x[0])+'</td><td>'+x[1]+'</td><td>'+x[2]+'</td><td>'+x[5]+'–'+x[6]+'</td><td class="tiny">'+x[7].slice(0,4)+'–'+x[8].slice(0,4)+'</td></tr>').join("")+'</tbody></table></div></div>',"Numeri dell'allenatore")+
     '<p class="note">Fonte panchine: Wikipedia (tabelle cambi allenatore, 10 stagioni). Fonte partite: football-data.co.uk. Ogni partita è attribuita all\'allenatore in carica quel giorno; se non è certo chi fosse in panchina, la partita non viene contata.</p>'+

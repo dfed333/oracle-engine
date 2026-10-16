@@ -118,11 +118,17 @@ def smorza(lc, lo, tot_lega, gamma):
     return lc * nuovo / tot, lo * nuovo / tot
 
 
-def con_probabilita(righe, gamma):
+def con_probabilita(righe, gamma, con_esatti=False):
     out = []
     for r in righe:
         lc, lo = smorza(r["lc"], r["lo"], r["tot_lega"], gamma)
-        out.append((r["lega"], r["cod"], probabilita(matrice(lc, lo, r["rho"])), esiti(r["gc"], r["go"])))
+        P = matrice(lc, lo, r["rho"])
+        e = esiti(r["gc"], r["go"])
+        if con_esatti:
+            celle = sorted(((P[i][j], i, j) for i in range(len(P)) for j in range(len(P))), reverse=True)
+            e["_top1"] = (r["gc"], r["go"]) == celle[0][1:]
+            e["_top3"] = (r["gc"], r["go"]) in [c[1:] for c in celle[:3]]
+        out.append((r["lega"], r["cod"], probabilita(P), e))
     return out
 
 
@@ -195,12 +201,15 @@ def riassunto_verifica(partite, leghe):
     """Tutto quello che serve all'app: smorzamento, curve di calibrazione, tabelle, deriva."""
     grezze = verifica_storica(partite, leghe)
     gamma, _ = stima_gamma(grezze)
-    righe = con_probabilita(grezze, gamma)
+    righe = con_probabilita(grezze, gamma, con_esatti=True)
     cal = tabelle_calibrazione(righe)
+    esatti1 = sum(e["_top1"] for _, _, _, e in righe) / len(righe)
+    esatti3 = sum(e["_top3"] for _, _, _, e in righe) / len(righe)
     out = {"gamma": gamma, "n": cal["n"], "acc1x2": cal["acc1x2"], "brier": cal["brier"],
            "stagioni": [f"20{c[:2]}/{c[2:]}" for c in cal["stagioni"]],
            "tab": cal["tab"],
-           "curve": {k: mappa_isotonica(cal["tab"][k]) for k in ("O25", "GG")}}
+           "curve": {k: mappa_isotonica(cal["tab"][k]) for k in ("O25", "GG")},
+           "esatto1": round(esatti1, 4), "esatto3": round(esatti3, 4)}
     out.update(deriva(partite, leghe))
     return out
 
