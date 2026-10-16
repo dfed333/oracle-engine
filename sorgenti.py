@@ -21,6 +21,7 @@ import os
 import re
 import time
 import unicodedata
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -41,8 +42,43 @@ def _cartella(*parti):
     return p
 
 
+FILE_ASSENTI = "url_assenti.json"
+
+
+def _assenti():
+    try:
+        with open(os.path.join(engine.CARTELLA_CACHE, FILE_ASSENTI), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def scarica(url, percorso, max_ore=None, timeout=40):
-    """Ritorna i byte di url, dalla cache se abbastanza recente. None se fallisce."""
+    """
+    Ritorna i byte di url, dalla cache se abbastanza recente. None se fallisce.
+    Gli archivi definitivi (max_ore=None) che la fonte non ha (risposta 404, es.
+    Conference League prima del 2021) vengono ricordati per 30 giorni: così ogni
+    aggiornamento non perde secondi a riprovarli. Un errore di rete non si ricorda.
+    """
+    if max_ore is None and not os.path.exists(percorso):
+        if time.time() - _assenti().get(url, 0) < 30 * 86400:
+            return None
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=timeout) as r:
+                dati = r.read()
+            with open(percorso, "wb") as f:
+                f.write(dati)
+            return dati
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                a = _assenti()
+                a[url] = time.time()
+                os.makedirs(engine.CARTELLA_CACHE, exist_ok=True)
+                with open(os.path.join(engine.CARTELLA_CACHE, FILE_ASSENTI), "w", encoding="utf-8") as f:
+                    json.dump(a, f)
+                return None
+        except Exception:
+            pass
     if os.path.exists(percorso):
         eta_ore = (time.time() - os.path.getmtime(percorso)) / 3600
         if max_ore is None or eta_ore < max_ore:
@@ -310,6 +346,16 @@ class _Tabelle(HTMLParser):
 
 def _griglia(righe):
     """Espande rowspan/colspan: ogni riga diventa una lista allineata di celle."""
+    # Se una cella d'intestazione ha un rowspan più lungo del blocco d'intestazione
+    # (succede: "Date of vacancy" con rowspan=2 nella Liga 2026-27) "colerebbe" nella
+    # prima riga di dati spostando tutte le colonne: "Pre-season" finiva al posto
+    # del nuovo allenatore. Taglio quei rowspan al blocco d'intestazione.
+    n = 0
+    while n < len(righe) and righe[n] and all(c["th"] for c in righe[n]):
+        n += 1
+    for i in range(n):
+        for c in righe[i]:
+            c["rs"] = min(c["rs"], n - i)
     griglia, pendenti = [], {}
     for riga in righe:
         out, col, it = [], 0, iter(riga)
@@ -360,7 +406,14 @@ def _pulisci_allenatore(testo):
     t = " ".join(t.replace("†", "").split()).strip(" ,;")
     if not t or norm(t) in ("tbd", "tba", "none", "vacant", "n a", "to be announced", "to be determined"):
         return None, interim
+    # scritte della tabella che non sono nomi: meglio "non so" che un nome finto
+    if any(x in norm(t) for x in _NON_NOMI) or not any(ch.isalpha() for ch in t):
+        return None, interim
     return t, interim
+
+
+_NON_NOMI = ("pre season", "preseason", "season ended", "not replaced", "position", "end of season", "vacant",
+             "unknown", "replaced by")
 
 
 def _col(intestazione, *parole):
@@ -378,7 +431,7 @@ def leggi_pagina_wiki(lega, anno):
     """
     stag = f"{anno}–{(anno + 1) % 100:02d}"
     corrente = anno >= anno_stagione()
-    cache = _cartella("wiki", f"{norm(lega).replace(' ', '_')}_{anno}.json")
+    cache = _cartella("wiki2", f"{norm(lega).replace(' ', '_')}_{anno}.json")   # wiki2: lettura corretta delle intestazioni
     if os.path.exists(cache) and not (corrente and (time.time() - os.path.getmtime(cache)) / 3600 > 6):
         with open(cache, encoding="utf-8") as f:
             return json.load(f)

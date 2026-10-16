@@ -826,17 +826,18 @@ function disegnaTab(f,opt){
     const uno='<div class="card" style="margin-top:10px"><div class="big3-l num"><span>'+esc(f.c)+'<b>'+pct(r.p1)+'</b></span><span class="x">Pareggio<b>'+pct(r.px)+'</b></span><span class="a">'+esc(f.o)+'<b>'+pct(r.p2)+'</b></span></div>'+
       '<div class="big3"><span style="width:'+pct(r.p1,1)+';background:var(--c1)"></span><span style="width:'+pct(r.px,1)+';background:var(--cx)"></span><span style="width:'+pct(r.p2,1)+';background:var(--c2)"></span></div>'+
       '<div class="row" style="margin-top:10px;justify-content:flex-end"><span class="tiny muted num">gol attesi '+r.lamC.toFixed(2)+' – '+r.lamO.toFixed(2)+'</span></div></div>';
-    let resto='<div class="sec">Le 3 uscite più probabili</div><div class="picks">'+r.picks.slice(0,3).map((x,i)=>'<div class="pick"><span class="rk">'+(i+1)+'</span><span class="lbl">'+esc(x[0])+'</span><span class="pc num">'+pct(x[1])+'</span></div>').join("")+'</div>';
-    resto+='<div class="sec">Probabilità chiave</div><div class="kgrid">'+
+    const uscite='<div class="sec">Le 3 uscite più probabili</div><div class="picks">'+r.picks.slice(0,3).map((x,i)=>'<div class="pick"><span class="rk">'+(i+1)+'</span><span class="lbl">'+esc(x[0])+'</span><span class="pc num">'+pct(x[1])+'</span></div>').join("")+'</div>';
+    // le probabilità chiave (Over, Gol/Gol, gol/angoli/cartellini/tiri attesi) si vedono anche nella versione gratuita, come su Oddster
+    const chiave='<div class="sec">Probabilità chiave</div><div class="kgrid">'+
       kp("Over 2.5 gol",r.o25*100,b.ov,v=>v.toFixed(0)+"%")+kp("Over 1.5 gol",r.ov[1.5]*100,r.base.tipo==="lega"?Lx.o15:null,v=>v.toFixed(0)+"%")+
       kp("Gol/Gol",r.ggc*100,b.gg,v=>v.toFixed(0)+"%")+kp("Gol attesi",r.lamC+r.lamO,r.base.tipo==="lega"?Lx.gol:null,v=>v.toFixed(2))+
       kp("Angoli attesi",r.corC+r.corO,r.base.tipo==="lega"?b.cor:null,v=>v.toFixed(1))+kp("Cartellini attesi",r.kar,r.base.tipo==="lega"?b.cart:null,v=>v.toFixed(1))+
       (r.tiri?kp("Tiri attesi",r.tiri.c+r.tiri.o,r.base.tipo==="lega"?Lx.t:null,v=>v.toFixed(1))+kp("Tiri in porta",r.tiri.pc+r.tiri.po,r.base.tipo==="lega"?Lx.p:null,v=>v.toFixed(1)):"")+'</div>'+
       '<p class="note">Il colore indica uno scarto di oltre il 10% dalla media '+(r.base.tipo==="coppa"?"della competizione":"del campionato")+'.</p>';
     const reali=f.st?'<div class="sec">Statistiche reali della partita</div><div class="card">'+statReali(f)+'</div>':"";
-    resto+='<div class="sec">Perché questo pronostico</div><div class="card"><ul class="why">'+motivoSegnale(r).concat(perche(r).slice(1)).map(x=>'<li>'+x+'</li>').join("")+'</ul></div>';
+    let resto='<div class="sec">Perché questo pronostico</div><div class="card"><ul class="why">'+motivoSegnale(r).concat(perche(r).slice(1)).map(x=>'<li>'+x+'</li>').join("")+'</ul></div>';
     resto+='<div class="sec">Quanto pesa ogni dato</div><div class="card">'+pesi(r)+'</div>';
-    p.innerHTML=ACC.premium?aff+uno+reali+resto:uno+reali+premium(aff+resto,"Affidabilità, uscite più probabili e analisi");
+    p.innerHTML=ACC.premium?aff+uno+reali+uscite+chiave+resto:uno+chiave+reali+premium(aff+uscite+resto,"Affidabilità, uscite più probabili e analisi");
   } else if(TAB==="gol"){
     let h='<div class="sec">Risultati esatti più probabili</div><div class="scores">'+r.celle.slice(0,9).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>'+notaEsatti()+'<div class="card" style="margin-top:8px">'+barreFasce(r)+'</div>';
     h+='<div class="sec">Over / Under</div><div class="card"><div class="tbl-w"><table class="num"><thead><tr><th>Linea</th><th>Over</th><th>Under</th></tr></thead><tbody>'+

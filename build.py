@@ -64,6 +64,8 @@ def main():
     oggi = datetime.date.today()
     anno = sorgenti.anno_stagione()
     anni = list(range(anno - engine.N_STAGIONI + 1, anno + 1))
+    # le tabelle Wikipedia lette con il vecchio difetto delle intestazioni ("Pre-season"): ora stanno in wiki2
+    shutil.rmtree(os.path.join(engine.CARTELLA_CACHE, "wiki"), ignore_errors=True)
 
     log("1/7 partite dei campionati (football-data.co.uk)…")
     partite, conteggi = engine.carica_partite()
