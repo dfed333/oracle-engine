@@ -105,44 +105,107 @@ def _riassunto_tm():
     return partite
 
 
+PARTICELLE = {"de", "da", "di", "del", "della", "van", "von", "der", "den", "el", "al", "ben", "bin", "la", "le",
+              "dos", "das", "do", "y", "e"}
+TITOLI = {"dr", "prof", "sir"}
+
+
+def _token(nome):
+    return [t for t in norm(nome).split() if t not in TITOLI]
+
+
+def _stesso_nome(a, b):
+    """Due nomi di battesimo dello stesso arbitro: "Sam"/"Samuel", "Mohammed"/"Mohammad"."""
+    if a == b:
+        return True
+    if len(a) >= 3 and len(b) >= 3 and (a.startswith(b) or b.startswith(a)):
+        return True
+    return len(a) >= 4 and len(b) >= 4 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.8
+
+
+def canonici(conteggi):
+    """
+    Le grafie diverse dello stesso arbitro nello storico ("Donatas Rumsas"/"Rumšas", "Sam"/"Samuel Allison")
+    diventano una sola: quella usata più spesso. Stessi cognomi e nome di battesimo compatibile.
+    """
+    gruppi = defaultdict(list)
+    for nome in conteggi:
+        t = _token(nome)
+        if len(t) >= 2:
+            gruppi[" ".join(t[1:])].append((nome, t[0]))
+    out = {}
+    for lista in gruppi.values():
+        lista.sort(key=lambda x: -conteggi[x[0]])
+        capi = []
+        for nome, primo in lista:
+            for capo, primo_capo in capi:
+                if _stesso_nome(primo, primo_capo):
+                    out[nome] = capo
+                    break
+            else:
+                capi.append((nome, primo))
+    return out
+
+
 class Nomi:
-    """Unisce i nomi degli arbitri delle diverse fonti ("M Oliver" ↔ "Michael Oliver")."""
+    """
+    Unisce i nomi degli arbitri delle diverse fonti, con regole prudenti (nel dubbio NON unisce):
+      "M Oliver"                ↔ "Michael Oliver"            (iniziale + cognome)
+      "José Sánchez Martínez"   ↔ "José María Sánchez Martínez" (almeno 2 parti in comune, stessa iniziale)
+      "Ricardo de Burgos"       ↔ "De Burgos Bengoetxea"      (stile spagnolo: la fonte scrive solo i cognomi)
+      "Matthias Jöllenbeck"     ↔ "Dr. Matthias Jöllenbeck"   (titoli ignorati)
+    "Adrian Gillett" e "Jarred Gillett" restano due persone: un solo cognome in comune e nome diverso.
+    """
 
     def __init__(self, nomi_per_lega):
         self.esatti = {}
-        self.chiavi = defaultdict(set)
+        self.per_lega = defaultdict(list)
         for lega, nomi in nomi_per_lega.items():
             for n in nomi:
-                self.esatti[norm(n)] = n
-                t = norm(n).split()
-                if len(t) >= 2:
-                    for cognome in t[1:]:
-                        self.chiavi[(lega, cognome, t[0][0])].add(n)
-                        self.chiavi[(None, cognome, t[0][0])].add(n)
+                self.aggiungi(n, lega)
 
     def aggiungi(self, nome, lega):
-        n = norm(nome)
-        if not n or n in self.esatti:
+        t = _token(nome)
+        if not t:
             return
-        self.esatti[n] = nome
-        t = n.split()
-        if len(t) >= 2:
-            for cognome in t[1:]:
-                self.chiavi[(lega, cognome, t[0][0])].add(nome)
-                self.chiavi[(None, cognome, t[0][0])].add(nome)
+        k = " ".join(t)
+        self.esatti.setdefault(k, nome)
+        for ambito in (lega, None):
+            if all(x[0] != nome for x in self.per_lega[ambito]):
+                self.per_lega[ambito].append((nome, t))
+
+    @staticmethod
+    def _punti(q, c):
+        """Quanto il nome cercato q somiglia al candidato c (liste di parole). 0 = non è lui."""
+        forti_q = {x for x in q if x not in PARTICELLE and len(x) > 1}
+        forti_c = {x for x in c if x not in PARTICELLE and len(x) > 1}
+        comuni = len(forti_q & forti_c)
+        if len(q) >= 2 and len(q[0]) == 1:                       # "M Oliver": iniziale + cognome
+            return 3 if q[-1] in c[1:] and c[0][0] == q[0] else 0
+        if comuni >= 2 and q[0][0] == c[0][0]:
+            return 2 + comuni
+        if len(q) >= 2 and q[1:] == c[1:] and _stesso_nome(q[0], c[0]):     # "Sam Allison" ↔ "Samuel Allison"
+            return 2
+        if len(q) >= 3 and " ".join(c).startswith(" ".join(q[1:]) + " "):   # cognomi senza nome di battesimo
+            return 2
+        return 0
 
     def trova(self, nome, lega=None):
         if not nome:
             return None
-        n = norm(nome)
-        if n in self.esatti:
-            return self.esatti[n]
-        t = n.split()
-        if len(t) >= 2:
-            for chiave in ((lega, t[-1], t[0][0]), (None, t[-1], t[0][0])):
-                c = self.chiavi.get(chiave)
-                if c and len(c) == 1:
-                    return next(iter(c))
+        q = _token(nome)
+        if not q:
+            return None
+        k = " ".join(q)
+        if k in self.esatti:
+            return self.esatti[k]
+        for ambito in (lega, None):
+            voti = sorted(((self._punti(q, c), n) for n, c in self.per_lega.get(ambito, [])), reverse=True)
+            voti = [v for v in voti if v[0] > 0]
+            if voti and (len(voti) == 1 or voti[0][0] > voti[1][0]):
+                return voti[0][1]
+            if voti:                                                  # pari merito: nel dubbio non unisce
+                return None
         return None
 
 
@@ -224,6 +287,11 @@ def costruisci(partite_fd, finestra, oggi, log=print):
     """
     tm = _riassunto_tm()
     log(f"    storico arbitri: {len(tm)} partite (transfermarkt-datasets)")
+    canon = canonici(Counter(x["a"] for x in tm))
+    for x in tm:
+        x["a"] = canon.get(x["a"], x["a"])
+    if canon:
+        log(f"    grafie unificate nello storico: {len(canon)}")
     per_lega = defaultdict(set)
     for x in tm:
         per_lega[x["l"]].add(x["a"])
