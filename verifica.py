@@ -273,6 +273,9 @@ def allinea(P0, tO, tG):
     return [[P0[i][j] * f[CLASSI[i][j]] for j in range(11)] for i in range(11)]
 
 
+SOGLIE_SICURO = (0.55, 0.60, 0.65, 0.70)
+
+
 def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=30):
     """
     Su ogni partita della verifica (pronostico fatto con le sole partite precedenti) si guarda se il
@@ -284,6 +287,7 @@ def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=
     recenti = set(codici[-stagioni_squadre:])
     acc_l = defaultdict(lambda: defaultdict(float))
     acc_s = defaultdict(lambda: defaultdict(float))
+    acc_m = defaultdict(lambda: defaultdict(lambda: [0, 0]))
     for r in grezze:
         lc, lo = smorza(r["lc"], r["lo"], r["tot_lega"], gamma)
         P0 = matrice(lc, lo, r["rho"])
@@ -299,6 +303,15 @@ def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=
         vero = "1" if gc > go else ("X" if gc == go else "2")
         h = {"esito": esito == vero, "ou": (o25 > .5) == (gc + go > 2), "gg": (gg > .5) == (gc > 0 and go > 0),
              "ex": any((i, j) == (gc, go) for _, i, j in celle)}
+        # mercati con il modello "sicuro": stessa probabilità che l'app mostra (1X2 dalla matrice, Over e Gol/Gol verificati)
+        mk = acc_m[r["lega"]]
+        for chiave, prob, uscito in (("1", p["1"], gc > go), ("X", p["X"], gc == go), ("2", p["2"], gc < go),
+                                     ("O25", o25, gc + go > 2), ("U25", 1 - o25, gc + go <= 2),
+                                     ("GG", gg, gc > 0 and go > 0), ("NG", 1 - gg, not (gc > 0 and go > 0))):
+            for soglia in SOGLIE_SICURO:
+                if prob >= soglia:
+                    v = mk[(chiave, soglia)]; v[0] += 1; v[1] += uscito
+        mk[("tot", 0)][0] += 1
         a = acc_l[r["lega"]]
         a["n"] += 1
         for k, v in h.items():
@@ -321,34 +334,44 @@ def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=
                    "ex": pc(b, "ex"), "gf": round(b["gf"] / b["n"], 2), "gs": round(b["gs"] / b["n"], 2),
                    "dgf": round((b["gf"] - b["gf_att"]) / b["n"], 2), "dgs": round((b["gs"] - b["gs_att"]) / b["n"], 2)}
                for t, b in acc_s.items() if b["n"] >= minimo}
-    return {"leghe": leghe, "squadre": squadre,
+    mercati = {}
+    for l, mk in acc_m.items():
+        tot = mk[("tot", 0)][0]
+        mercati[l] = {f"{k}|{int(sg * 100)}": [v[0], round(100 * v[1] / v[0], 1), round(100 * v[0] / tot, 1)]
+                      for (k, sg), v in mk.items() if k != "tot" and v[0]}
+    return {"leghe": leghe, "squadre": squadre, "mercati": mercati,
             "stag_l": [f"20{c[:2]}/{c[2:]}" for c in codici], "stag_s": [f"20{c[:2]}/{c[2:]}" for c in sorted(recenti)]}
 
 
-def numeri_campionati(partite, cod_corr, n_prec=3):
-    """Gol, Over, Gol/Gol, 0-0, vittorie in casa: stagione in corso e ultime n_prec stagioni concluse."""
-    codici = sorted({m["stagione"] for m in partite})
-    prec = set(c for c in codici if c != cod_corr)
-    prec = set(sorted(prec)[-n_prec:])
+def numeri_campionati(partite, oggi):
+    """
+    Gol, Over, Gol/Gol, 0-0, vittorie in casa e i risultati esatti più frequenti di ogni campionato
+    su tre periodi: ultimi 10 anni (tutto l'archivio), ultimi 3 anni, ultimo anno (365 giorni).
+    """
+    periodi = {"10": None, "3": oggi - datetime.timedelta(days=3 * 365), "1": oggi - datetime.timedelta(days=365)}
     acc = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    ris = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
     for m in partite:
-        per = "ora" if m["stagione"] == cod_corr else ("prima" if m["stagione"] in prec else None)
-        if not per:
-            continue
-        a = acc[m["lega"]][per]
         t = m["gc"] + m["go"]
-        a["n"] += 1; a["gol"] += t; a["o15"] += t > 1; a["o25"] += t > 2; a["o35"] += t > 3
-        a["gg"] += m["gc"] > 0 and m["go"] > 0; a["zero"] += t == 0; a["casa"] += m["gc"] > m["go"]
-        a["x"] += m["gc"] == m["go"]
+        for per, da in periodi.items():
+            if da and m["data"] < da:
+                continue
+            a = acc[m["lega"]][per]
+            a["n"] += 1; a["gol"] += t; a["o15"] += t > 1; a["o25"] += t > 2; a["o35"] += t > 3
+            a["gg"] += m["gc"] > 0 and m["go"] > 0; a["zero"] += t == 0; a["casa"] += m["gc"] > m["go"]
+            a["x"] += m["gc"] == m["go"]
+            ris[m["lega"]][per][f"{m['gc']}-{m['go']}"] += 1
     out = {}
     for l, per in acc.items():
         out[l] = {}
         for k, a in per.items():
             n = a["n"]
+            top = sorted(ris[l][k].items(), key=lambda x: -x[1])[:8]
             out[l][k] = {"n": int(n), "gol": round(a["gol"] / n, 2), "o15": round(100 * a["o15"] / n, 1),
                          "o25": round(100 * a["o25"] / n, 1), "o35": round(100 * a["o35"] / n, 1),
                          "gg": round(100 * a["gg"] / n, 1), "zero": round(100 * a["zero"] / n, 1),
-                         "casa": round(100 * a["casa"] / n, 1), "x": round(100 * a["x"] / n, 1)}
+                         "casa": round(100 * a["casa"] / n, 1), "x": round(100 * a["x"] / n, 1),
+                         "ris": [[r, round(100 * c / n, 1)] for r, c in top]}
     return out
 
 

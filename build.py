@@ -169,7 +169,7 @@ def main():
     log("    chi rispetta di più i pronostici (campionati e squadre)…")
     squadre_ora = {t: ultima[t][1] for t in ultima if ultima[t][0] >= oggi - datetime.timedelta(days=200)}
     PV = verifica.prevedibilita(grezze, VER["gamma"], VER["curve"], squadre_ora)
-    PV["num"] = verifica.numeri_campionati(partite, engine._codici_stagioni()[-1])
+    PV["num"] = verifica.numeri_campionati(partite, oggi)
     log(f"    prevedibilità: {len(PV['leghe'])} campionati, {len(PV['squadre'])} squadre")
 
     log("7/7 scrivo dist/…")

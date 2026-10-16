@@ -24,7 +24,12 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
 - **Versione gratuita**: 1X2, precedenti e "Probabilità chiave" si vedono; le schede
   complete mostrano in alto cosa contengono e il tasto "Sblocca tutto", sotto
   l'anteprima vera con le metriche leggibili e i numeri sfocati.
-- **Simula**: qualsiasi incrocio, anche tra campionati diversi.
+- **Confronto** (in Classifiche): quali campionati e quali squadre rispettano di più i
+  pronostici; i numeri e i risultati esatti più frequenti di ogni campionato negli ultimi
+  10 anni, 3 anni e nell'ultimo anno; "Cosa dicono i dati": su quali pronostici il modello
+  è più solido in ogni campionato quando è sicuro (≥ 55/60/65/70%).
+- **Preferite**: le partite scelte, messe a confronto in una tabella per studiarle
+  (restano sul telefono, fino a 4 giorni dopo la partita).
 
 ## Da dove vengono i dati
 
