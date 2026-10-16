@@ -153,6 +153,7 @@ def main():
 
     log("    verifica sul passato e misura dell'incertezza…")
     VER = verifica.riassunto_verifica(partite, leghe)
+    grezze = VER.pop("_grezze")
     log(f"    {VER['n']} partite verificate · smorzamento gol {VER['gamma']} · favorito indovinato {VER['acc1x2']:.1%}")
     # quante informazioni ha ogni squadra: campione effettivo (pesato) e partite di questa stagione
     cod_corr = engine._codici_stagioni()[-1]
@@ -164,6 +165,12 @@ def main():
             v[0] += w; v[1] += w * w
             if m.get("stagione") == cod_corr:
                 v[2] += 1
+
+    log("    chi rispetta di più i pronostici (campionati e squadre)…")
+    squadre_ora = {t: ultima[t][1] for t in ultima if ultima[t][0] >= oggi - datetime.timedelta(days=200)}
+    PV = verifica.prevedibilita(grezze, VER["gamma"], VER["curve"], squadre_ora)
+    PV["num"] = verifica.numeri_campionati(partite, engine._codici_stagioni()[-1])
+    log(f"    prevedibilità: {len(PV['leghe'])} campionati, {len(PV['squadre'])} squadre")
 
     log("7/7 scrivo dist/…")
     # ---- campionati ----
@@ -301,7 +308,7 @@ def main():
             "controllo": {"arbitri": diag_arb, "calendario": sorgenti.CONTROLLO},
         },
         "L": L, "CUP": CUP, "DEF": DEF, "Q": Q, "C": C, "F": finestra, "H": prec, "FO": FO, "CL": classif,
-        "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S, "CAP": modello.CAP_CAR, "AR": AR,
+        "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S, "CAP": modello.CAP_CAR, "AR": AR, "PV": PV,
     }
 
     os.makedirs(DIST, exist_ok=True)

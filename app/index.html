@@ -281,9 +281,13 @@ tr.hl td{background:var(--ac-d)}
   </section>
 
   <section class="screen wrap" id="s-leghe" aria-label="Classifiche" hidden>
-    <h1 class="h1">Classifiche</h1>
+    <h1 class="h1" id="leghe-h1">Classifiche</h1>
+    <div class="seg2" id="leghe-vista" role="toolbar" aria-label="Classifiche o confronto"><button data-v="cl" aria-pressed="true">Classifiche</button><button data-v="conf" aria-pressed="false">Confronto</button></div>
+    <div id="cl-box">
     <div class="chips" id="leghe-chips" role="toolbar" aria-label="Campionato"></div>
     <div id="lega-body"></div>
+    </div>
+    <div id="conf-box" hidden></div>
   </section>
 
   <section class="screen wrap" id="s-all" aria-label="Allenatori" hidden>
@@ -350,7 +354,8 @@ const pct = (p, d = 0) => (100 * p).toFixed(d) + "%";
 const M = ["att", "dif", "corF", "corA", "cart"];
 const K_CAR = 40, CAP = {att: .15, dif: .05, corF: .22, corA: .31, cart: .07};   // aggiornato da data.json (misurato sui cambi di panchina)
 let D = null;                      // dati
-const STATO = {giorno: null, comp: "Tutte", lega: null, rank: "gol", allLega: "Tutti", vista: "all", arbLega: "Tutti", arbQ: ""};
+const STATO = {giorno: null, comp: "Tutte", lega: null, rank: "gol", allLega: "Tutti", vista: "all", arbLega: "Tutti", arbQ: "",
+  legheVista: "cl", pv: "esito", num: "gol", per: "ora", sqL: "Tutti", sqM: "esito"};
 const CACHE = new Map();           // calcoli per partita
 
 /* ---------------- colori stemmi ---------------- */
@@ -489,6 +494,9 @@ function calcola(f, opt){
   // arbitro designato: quanti cartellini dà rispetto a un arbitro medio (credibilità: partite recenti / (partite + 10))
   const arb=f.ar&&D.AR?D.AR[f.ar]:null, fArb=arb&&arb.f?clamp(arb.f,.7,1.4):1;
   const muKC=carC0*pc.cart*aggr(po.cart)*at.cart*boost*fArb, muKO=carO0*po.cart*aggr(pc.cart)*at.cart*boost*fArb;
+  // i pezzi del calcolo dei cartellini, per spiegarlo nella scheda (sono gli stessi numeri usati sopra)
+  const fsK=Vs.length?Vs.reduce((a,L)=>a+((L.fs&&L.fs.cart)||1),0)/Vs.length:1;
+  const kf={base:carC0+carO0,fs:fsK,c:pc.cart,o:po.cart,ac:aggr(po.cart),ao:aggr(pc.cart),stile:at.cart,derby:boost,arb:fArb};
   // tiri attesi (medie reali squadra × concessi dall'avversaria / media lega)
   let tiri=null; const tc=qc.t, to=qo.t;
   if(tc&&to&&tc.t&&to.t&&Lc&&Lo&&Lc.x.t&&Lo.x.t){ const mt=(Lc.x.t+Lo.x.t)/4, mp=(Lc.x.p+Lo.x.p)/4;
@@ -496,7 +504,7 @@ function calcola(f, opt){
     tiri={c:tc.t*to.ts/mt*ft, o:to.t*tc.ts/mt*ft, pc:tc.p*to.ps/mp*fp, po:to.p*tc.ps/mp*fp}; }
   const stimati = !!(qc.solo||qo.solo||qc.cs||qo.cs);
   const r={ok:true,mc:false,key,f,lamC:mC,lamO:mO,lamRaw:[lamC,lamO],o25raw,ggraw,rho,P,p1,px,p2,gg,ov,celle,base,at,st_c,st_o,all_c,all_o,pc,po,
-    muCC,muCO,muKC,muKO,der,h2h,tiri,stimati,opt,grezzi,arb:arb?{nome:f.ar,f:fArb}:null};
+    muCC,muCO,muKC,muKO,kf,der,h2h,tiri,stimati,opt,grezzi,arb:arb?{nome:f.ar,f:fArb}:null};
   r.o25=ov[2.5]; r.ggc=gg;       // già allineate: sono le stesse della matrice
   CACHE.set(key,r); return r; }
 
@@ -672,6 +680,8 @@ function vetrine(){
       ["Vittorie, pareggi e sconfitte in %","Gol fatti e subiti, Over 2.5 e Gol/Gol a partita","Angoli e cartellini delle sue squadre","Il rendimento in ogni squadra allenata e in coppa europea"]],
     sim:["Simula qualsiasi partita","Scegli due squadre, anche di campionati diversi.",
       ["Pronostico completo per qualsiasi incrocio","Gol, angoli, cartellini e tiri attesi","Cambia allenatore, stile o assenze e guarda come cambia"]],
+    prev:["Le squadre che rispettano i pronostici","Con chi il modello ci prende di più, e con chi sbaglia.",
+      ["Le squadre più prevedibili su 1X2, Over/Under, Gol/No Gol e risultato esatto","Chi segna più gol del previsto e chi ne subisce meno","Filtro per campionato, ultime 3 stagioni"]],
     rank:["Classifica del giorno","Le partite del giorno ordinate per numeri.",
       ["Le partite con più gol attesi","Le partite con più angoli, cartellini o tiri attesi"]],
     guarda:["Le partite da guardare, con l'uscita","Qui vedi quali partite hanno la stellina: con la versione completa vedi quale uscita indicano e perché.",
@@ -722,6 +732,7 @@ async function avvio(){
   await caricaAccesso();
   if(D.CAP) Object.assign(CAP,D.CAP);
   applicaOverride(); preparaAllenatori(); preparaArbitri(); preparaSimula();
+  $("leghe-vista").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ STATO.legheVista=b.dataset.v; vistaLeghe(); }));
   if(!ACC.premium){ const w=$("sim-wrap"); w.innerHTML=premium(w.innerHTML,"sim"); }
   window.addEventListener("hashchange",router); router();
 }
@@ -745,7 +756,7 @@ function router(){
   const scr=["partite","top","leghe","all","sim"].includes(parti[0])?parti[0]:"partite";
   for(const s of ["partite","top","leghe","all","sim"]) $("s-"+s).hidden = s!==scr;
   document.querySelectorAll(".nav button").forEach(b=>b.setAttribute("aria-current",b.dataset.go===scr?"page":"false"));
-  if(scr==="partite") schermoPartite(); else if(scr==="top") schermoTop(); else if(scr==="leghe") schermoLeghe(); else if(scr==="all") vistaAllenatori();
+  if(scr==="partite") schermoPartite(); else if(scr==="top") schermoTop(); else if(scr==="leghe") vistaLeghe(); else if(scr==="all") vistaAllenatori();
 }
 document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",()=>vai("#"+b.dataset.go)));
 function chiudi(){ if(history.length>1) history.back(); else vai("#partite"); }
@@ -958,7 +969,7 @@ function disegnaTab(f,opt){
       '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"ang")+'</div>'+(r.stimati?'<p class="note warn">Per almeno una squadra gli angoli sono stimati: la fonte non pubblica i suoi dati.</p>':"")+
       '<p class="note">10.000 simulazioni Monte Carlo: chi va sotto spinge e guadagna più angoli, le partite aperte ne producono di più.</p>',"ang");
   } else if(TAB==="car"){
-    p.innerHTML=premium('<div class="sec">Arbitro</div>'+boxArbitro(f)+'<div class="sec">Cartellini attesi</div><div class="card"><div class="row"><span class="grow">Totale atteso (gialli + rossi)</span><b class="disp num" style="font-size:22px">'+r.kar.toFixed(1)+'</b></div>'+(b.cart!=null&&r.base.tipo==="lega"?'<div class="tiny muted">media del campionato: '+b.cart.toFixed(1)+'</div>':"")+(r.der?'<div class="warn" style="margin-top:10px">È il <b>'+esc(r.der[0])+'</b>: nervosismo atteso +'+Math.round((r.der[1]-1)*100)+'%.</div>':"")+'</div>'+
+    p.innerHTML=premium('<div class="sec">Arbitro</div>'+boxArbitro(f)+'<div class="sec">Da dove nasce il numero</div>'+originiCartellini(f,r)+'<div class="sec">Cartellini attesi</div><div class="card"><div class="row"><span class="grow">Totale atteso (gialli + rossi)</span><b class="disp num" style="font-size:22px">'+r.kar.toFixed(1)+'</b></div>'+(b.cart!=null&&r.base.tipo==="lega"?'<div class="tiny muted">media del campionato: '+b.cart.toFixed(1)+'</div>':"")+(r.der?'<div class="warn" style="margin-top:10px">È il <b>'+esc(r.der[0])+'</b>: nervosismo atteso +'+Math.round((r.der[1]-1)*100)+'%.</div>':"")+'</div>'+
       '<div class="sec">Linee</div><div class="card">'+tabLinee(r.karL)+'</div>'+
       '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"car")+'</div>',"car");
   } else if(TAB==="tiri"){
@@ -1067,9 +1078,9 @@ function schermoLeghe(){
   $("leghe-chips").innerHTML=leghe.map(l=>'<button class="chip" data-l="'+esc(l)+'" aria-pressed="'+(l===STATO.lega)+'">'+esc(nomeComp(l))+'</button>').join("");
   $("leghe-chips").querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{ STATO.lega=b.dataset.l; schermoLeghe(); }));
   const rows=D.CL[STATO.lega]||[], L=D.L[STATO.lega]||{};
-  let h='<div class="card" style="margin-top:6px;padding:8px 10px"><div class="tbl-w"><table class="num"><thead><tr><th>#</th><th style="text-align:left">Squadra</th><th>G</th><th>DR</th><th>Pt</th><th>Forma</th></tr></thead><tbody>'+
-    rows.map((x,i)=>'<tr><td>'+(i+1)+'</td><td class="tn" style="text-align:left"><span class="row" style="gap:6px">'+stemma(x[0],16)+'<span class="ell">'+esc(x[0])+'</span></span></td><td>'+x[1]+'</td><td>'+(x[5]-x[6]>0?"+":"")+(x[5]-x[6])+'</td><td><b>'+x[7]+'</b></td><td><span class="form" style="justify-content:flex-end">'+x[8].split("").map(e=>'<i class="'+e+'">'+e+'</i>').join("")+'</span></td></tr>').join("")+'</tbody></table></div></div>'+
-    '<p class="note">Stagione in corso: punti, poi differenza reti e gol fatti.</p>';
+  let h='<div class="card" style="margin-top:6px;padding:8px 10px"><div class="tbl-w"><table class="num"><thead><tr><th>#</th><th style="text-align:left">Squadra</th><th>G</th><th>GF</th><th>GS</th><th>Pt</th><th>Forma</th></tr></thead><tbody>'+
+    rows.map((x,i)=>'<tr><td>'+(i+1)+'</td><td class="tn" style="text-align:left"><span class="row" style="gap:6px">'+stemma(x[0],16)+'<span class="ell">'+esc(x[0])+'</span></span></td><td>'+x[1]+'</td><td>'+x[5]+'</td><td>'+x[6]+'</td><td><b>'+x[7]+'</b></td><td><span class="form" style="justify-content:flex-end">'+x[8].split("").map(e=>'<i class="'+e+'">'+e+'</i>').join("")+'</span></td></tr>').join("")+'</tbody></table></div></div>'+
+    '<p class="note">Stagione in corso. G = partite giocate, GF = gol fatti, GS = gol subiti, Pt = punti.</p>';
   if(L.p1!=null) h+='<div class="sec">Il DNA del campionato</div><div class="kgrid">'+
     kp("Vince la squadra di casa",L.p1,null,v=>v.toFixed(0)+"%")+kp("Pareggio",L.px,null,v=>v.toFixed(0)+"%")+
     kp("Over 2.5",L.ov,null,v=>v.toFixed(0)+"%")+kp("Gol/Gol",L.gg,null,v=>v.toFixed(0)+"%")+
@@ -1077,6 +1088,55 @@ function schermoLeghe(){
     kp("Cartellini a partita",L.cart,null,v=>v.toFixed(1))+kp("Forza in Europa",L.s*100,null,v=>v.toFixed(0))+'</div>'+
     '<p class="note">Risultati più frequenti: '+(L.top||[]).map(t=>'<b>'+t[0]+'</b> ('+t[1]+'%)').join(" · ")+'. "Forza in Europa": 100 = media dei 5 grandi campionati, calcolata dai risultati reali nelle coppe.</p>';
   $("lega-body").innerHTML=h;
+}
+
+/* ---------------- CONFRONTO: chi rispetta i pronostici e i numeri dei campionati ---------------- */
+const MET_PV=[["esito","1X2","l'esito (1, X o 2) più probabile secondo il modello"],["ou","Over/Under 2.5","l'Over o Under 2.5 indicato dal modello"],["gg","Gol/No Gol","il Gol/Gol o No Gol indicato dal modello"],["ex","Risultato esatto","il risultato esatto tra i 3 più probabili secondo il modello"]];
+const MET_NUM=[["gol","Gol a partita"],["o25","Over 2.5"],["gg","Gol/Gol"],["o15","Over 1.5"],["o35","Over 3.5"],["zero","0-0"],["casa","Vince chi gioca in casa"],["x","Pareggi"]];
+const MET_SQ=MET_PV.concat([["dgf","Segnano più del previsto"],["dgs","Subiscono meno del previsto"]]);
+function vistaLeghe(){
+  const conf=STATO.legheVista==="conf";
+  $("leghe-vista").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===STATO.legheVista));
+  $("cl-box").hidden=conf; $("conf-box").hidden=!conf; $("leghe-h1").textContent=conf?"Confronto":"Classifiche";
+  if(conf) schermoConfronto(); else schermoLeghe(); }
+function chipsDi(lista,att,dato){ return '<div class="chips" style="margin:6px 0 10px" role="toolbar">'+lista.map(x=>'<button class="chip" data-'+dato+'="'+esc(x[0])+'" aria-pressed="'+(x[0]===att)+'">'+esc(x[1])+'</button>').join("")+'</div>'; }
+function barraRiga(nome,sotto,v,min,max,testo,col){ const w=max>min?12+88*(v-min)/(max-min):100;
+  return '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="row small"><span class="grow ell"><b>'+nome+'</b>'+(sotto?' <span class="tiny muted">'+sotto+'</span>':'')+'</span><b class="num">'+testo+'</b></div>'+
+    '<div class="mini" style="height:6px;margin-top:5px"><span style="width:'+w.toFixed(0)+'%;background:'+(col||"var(--ac)")+'"></span></div></div>'; }
+function schermoConfronto(){
+  const PV=D.PV, box=$("conf-box");
+  if(!PV){ box.innerHTML='<div class="empty">Dati non ancora disponibili: arriveranno con il prossimo aggiornamento.</div>'; return; }
+  const m=MET_PV.find(x=>x[0]===STATO.pv)||MET_PV[0], nl=PV.leghe;
+  const L=Object.keys(nl).sort((a,b)=>nl[b][m[0]]-nl[a][m[0]]), vals=L.map(l=>nl[l][m[0]]);
+  let h='<div class="sec">Quale campionato rispetta di più i pronostici</div>'+chipsDi(MET_PV.map(x=>[x[0],x[1]]),m[0],"pv")+
+    '<div class="card" style="padding:4px 12px">'+L.map(l=>barraRiga(esc(nomeComp(l)),nl[l].n.toLocaleString("it-IT")+' partite',nl[l][m[0]],Math.min(...vals),Math.max(...vals),n2(nl[l][m[0]],1)+'%',"var(--win)")).join("")+'</div>'+
+    '<p class="note">Quante volte è uscito '+m[2]+', su '+Object.values(nl).reduce((a,x)=>a+x.n,0).toLocaleString("it-IT")+' partite delle stagioni '+PV.stag_l[0]+' – '+PV.stag_l[PV.stag_l.length-1]+
+    '. Ogni pronostico è fatto solo con le partite precedenti, come se fosse quel giorno. Più è alto, più il campionato rispetta i pronostici.</p>';
+  // numeri dei campionati
+  const per=STATO.per, k=STATO.num, nm=PV.num, lab=(MET_NUM.find(x=>x[0]===k)||MET_NUM[0])[1];
+  const L2=Object.keys(nm).filter(l=>nm[l][per]).sort((a,b)=>nm[b][per][k]-nm[a][per][k]), v2=L2.map(l=>nm[l][per][k]);
+  h+='<div class="sec">I numeri dei campionati</div>'+chipsDi(MET_NUM,k,"num")+chipsDi([["ora","Questa stagione"],["prima","Ultime 3 stagioni"]],per,"per")+
+    '<div class="card" style="padding:4px 12px">'+L2.map(l=>{ const x=nm[l][per], v=x[k];
+      return barraRiga(esc(nomeComp(l)),x.n+' partite',v,Math.min(...v2),Math.max(...v2),k==="gol"?n2(v,2)+' <span class="tiny muted">· '+n2(v/2,2)+' subiti a squadra</span>':n2(v,1)+'%',"var(--ac)"); }).join("")+'</div>'+
+    '<p class="note">'+lab+(k==="gol"?': in alto i campionati con più gol, in fondo quelli dove si segna e si subisce meno.':': in alto i campionati dove succede più spesso.')+'</p>';
+  // squadre (versione completa)
+  const sq=PV.squadre, ms=MET_SQ.find(x=>x[0]===STATO.sqM)||MET_SQ[0];
+  const legheSq=["Tutti",...ordineComp(new Set(Object.values(sq).map(x=>x.l)))];
+  const T=Object.keys(sq).filter(t=>STATO.sqL==="Tutti"||sq[t].l===STATO.sqL);
+  const val=t=>ms[0]==="dgs"?-sq[t].dgs:sq[t][ms[0]];
+  T.sort((a,b)=>val(b)-val(a));
+  const fmtS=t=>ms[0]==="dgf"?(sq[t].dgf>0?"+":"")+n2(sq[t].dgf,2)+' gol':ms[0]==="dgs"?(sq[t].dgs>0?"+":"")+n2(sq[t].dgs,2)+' gol':n2(sq[t][ms[0]],1)+'%';
+  const vv=T.map(val), riga=t=>barraRiga(stemma(t,16)+' '+esc(t),esc(nomeComp(sq[t].l))+' · '+sq[t].n+' partite',val(t),Math.min(...vv),Math.max(...vv),fmtS(t),"var(--pick)");
+  const sqH='<div class="card" style="padding:4px 12px"><div class="tiny muted" style="padding-top:8px">Le più fedeli</div>'+T.slice(0,10).map(riga).join("")+'</div>'+
+    (T.length>15?'<div class="card" style="padding:4px 12px;margin-top:8px"><div class="tiny muted" style="padding-top:8px">Le meno fedeli</div>'+T.slice(-5).reverse().map(riga).join("")+'</div>':"")+
+    '<p class="note">'+(ms[0]==="dgf"?"Gol fatti a partita meno quelli attesi dal modello.":ms[0]==="dgs"?"Gol subiti a partita meno quelli attesi: in alto chi subisce meno del previsto.":"Quante volte è uscito "+(MET_PV.find(x=>x[0]===ms[0])||MET_PV[0])[2]+".")+' Stagioni '+PV.stag_s[0]+' – '+PV.stag_s[PV.stag_s.length-1]+', solo squadre con almeno 30 partite.</p>';
+  h+='<div class="sec">Le squadre che rispettano i pronostici</div>'+chipsDi(legheSq.map(l=>[l,l==="Tutti"?"Tutti":nomeComp(l)]),STATO.sqL,"sql")+chipsDi(MET_SQ.map(x=>[x[0],x[1]]),ms[0],"sqm")+premium(sqH,"prev");
+  box.innerHTML=h;
+  box.querySelectorAll("[data-pv]").forEach(b=>b.addEventListener("click",()=>{ STATO.pv=b.dataset.pv; schermoConfronto(); }));
+  box.querySelectorAll("[data-num]").forEach(b=>b.addEventListener("click",()=>{ STATO.num=b.dataset.num; schermoConfronto(); }));
+  box.querySelectorAll("[data-per]").forEach(b=>b.addEventListener("click",()=>{ STATO.per=b.dataset.per; schermoConfronto(); }));
+  box.querySelectorAll("[data-sql]").forEach(b=>b.addEventListener("click",()=>{ STATO.sqL=b.dataset.sql; schermoConfronto(); }));
+  box.querySelectorAll("[data-sqm]").forEach(b=>b.addEventListener("click",()=>{ STATO.sqM=b.dataset.sqm; schermoConfronto(); }));
 }
 
 /* ---------------- ALLENATORI ---------------- */
@@ -1101,6 +1161,21 @@ function boxArbitro(f){
   return '<div class="card"><div class="row"><div class="grow"><div class="tiny muted">Arbitro designato · '+a.n+' partite dal '+a.da.slice(0,4)+'</div><h3 style="margin:2px 0 4px">'+esc(f.ar)+'</h3></div>'+
     '<button class="pill" data-vai="#r/'+esc(encodeURIComponent(f.ar))+'">Scheda</button></div>'+righeArbitro(a)+
     '<p class="note">Nel pronostico: <b>'+effettoArbitro(a)+'</b> rispetto a un arbitro medio. Conta di più chi ha arbitrato tanto nell\'ultimo anno (verificato su oltre 41.000 partite). I rigori dell\'arbitro invece non aiutano a prevedere quelli futuri: li mostriamo, ma non entrano nel calcolo.</p></div>'; }
+/* cartellini: tutti i pezzi dello stesso calcolo, nell'ordine in cui entrano */
+function originiCartellini(f,r){
+  const k=r.kf, pc=x=>{ const e=Math.round((x-1)*100); return e===0?'<span class="muted">nella media</span>':'<b style="color:'+(e>0?"var(--pick)":"var(--ac)")+'">'+(e>0?"+":"")+e+'%</b>'; };
+  const sq=(t,x)=>esc(t)+': '+(Math.abs(x-1)<.005?"cartellini nella media del campionato":(x>1?"prende più cartellini":"prende meno cartellini")+" della media")+' (con il suo allenatore)';
+  const righe=[
+    ["Media del campionato, casa + trasferta",'<b class="num">'+n2(k.base,1)+'</b>'],
+    ["Livello della stagione in corso",pc(k.fs)+'<span class="tiny muted"> (già nella media)</span>'],
+    [sq(f.c,k.c),pc(k.c)],[sq(f.o,k.o),pc(k.o)],
+    [esc(f.o)+" quanto fa ammonire gli avversari",pc(k.ac)],[esc(f.c)+" quanto fa ammonire gli avversari",pc(k.ao)],
+    ["Scontro di stili ("+esc(r.st_c)+" – "+esc(r.st_o)+")",pc(k.stile)],
+    ["Derby o partita calda",k.derby>1?pc(k.derby):'<span class="muted">no</span>'],
+    ["Arbitro"+(f.ar?" ("+esc(f.ar)+")":" (non ancora designato)"),f.ar?pc(k.arb):'<span class="muted">come un arbitro medio</span>']];
+  return '<div class="card">'+righe.map(x=>'<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow">'+x[0]+'</span><span class="num">'+x[1]+'</span></div>').join("")+
+    '<div class="row" style="padding-top:8px"><span class="grow"><b>Totale atteso</b></span><b class="disp num" style="font-size:20px">'+n2(r.kar,1)+'</b></div>'+
+    '<p class="note">Un solo calcolo: il campionato e la stagione, le due squadre (i cartellini che prendono e quanto fanno ammonire gli avversari), lo stile di gioco, il derby e l\'arbitro. Poi 10.000 simulazioni della partita: chi va sotto nel punteggio rischia di più.</p></div>'; }
 function legaArbitro(a){ return a.leghe&&a.leghe.length?a.leghe[0][0]:""; }
 function schermoArbitri(){
   const tutti=Object.entries(D.AR||{});

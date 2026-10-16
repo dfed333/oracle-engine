@@ -104,7 +104,8 @@ def verifica_storica(partite, leghe, stagioni_min=2, blocchi=4):
                     ac, dc = rat.get(m["casa"], PRIOR_NUOVA)
                     ao, do = rat.get(m["ospite"], PRIOR_NUOVA)
                     righe.append({"lega": lega, "cod": cod, "lc": Lc * ac * do, "lo": Lt * ao * dc,
-                                  "tot_lega": Lc + Lt, "rho": rho, "gc": m["gc"], "go": m["go"]})
+                                  "tot_lega": Lc + Lt, "rho": rho, "gc": m["gc"], "go": m["go"],
+                                  "casa": m["casa"], "ospite": m["ospite"]})
     return righe
 
 
@@ -211,6 +212,143 @@ def riassunto_verifica(partite, leghe):
            "curve": {k: mappa_isotonica(cal["tab"][k]) for k in ("O25", "GG")},
            "esatto1": round(esatti1, 4), "esatto3": round(esatti3, 4)}
     out.update(deriva(partite, leghe))
+    out["_grezze"] = grezze          # servono a prevedibilita(); build.py le toglie prima di pubblicare
+    return out
+
+
+# ------------------------------------------------------------------
+# PREVEDIBILITÀ: chi rispetta di più i pronostici (stesso cervello dell'app)
+# ------------------------------------------------------------------
+
+def calib(curva, p):
+    """Copia esatta di calib() dell'app: probabilità del modello → frequenza reale."""
+    c = curva
+    if not c:
+        return p
+    cl = lambda x: min(max(x, .01), .99)
+    if p <= c[0][0]:
+        return cl(p + (c[0][1] - c[0][0]))
+    for i in range(1, len(c)):
+        if p <= c[i][0]:
+            a, b = c[i - 1], c[i]
+            t = (p - a[0]) / (b[0] - a[0])
+            return a[1] + t * (b[1] - a[1])
+    z = c[-1]
+    return cl(p + (z[1] - z[0]))
+
+
+def _classe(i, j):
+    return (0 if i > j else (1 if i == j else 2)) * 4 + (2 if i + j > 2 else 0) + (1 if i and j else 0)
+
+
+CLASSI = [[_classe(i, j) for j in range(11)] for i in range(11)]
+
+
+def allinea(P0, tO, tG):
+    """
+    Come allinea() dell'app (raking su 1X2, Over 2.5, Gol/Gol). Le celle con lo stesso esito, lo stesso
+    Over/Under e lo stesso Gol/No Gol ricevono sempre lo stesso fattore: basta lavorare sui 12 totali.
+    """
+    T = [0.0] * 12
+    for i in range(11):
+        for j in range(11):
+            T[CLASSI[i][j]] += P0[i][j]
+    f = [1.0] * 12
+    tot = sum(T)
+    t1 = [sum(T[k] for k in range(12) if k // 4 == e) for e in range(3)]
+    obiettivi = [(lambda k: k // 4, t1), (lambda k: (k >> 1) & 1, [tot * (1 - tO), tot * tO]),
+                 (lambda k: k & 1, [tot * (1 - tG), tot * tG])]
+    for _ in range(40):
+        err = 0.0
+        for gruppo, tg in obiettivi:
+            sm = [0.0] * len(tg)
+            for k in range(12):
+                sm[gruppo(k)] += T[k] * f[k]
+            fc = [tg[g] / v if v > 1e-12 else 1.0 for g, v in enumerate(sm)]
+            err = max([err] + [abs(x - 1) for x in fc])
+            for k in range(12):
+                f[k] *= fc[gruppo(k)]
+        if err < 1e-7:
+            break
+    return [[P0[i][j] * f[CLASSI[i][j]] for j in range(11)] for i in range(11)]
+
+
+def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=30):
+    """
+    Su ogni partita della verifica (pronostico fatto con le sole partite precedenti) si guarda se il
+    modello ci ha preso: esito 1X2 più probabile, Over/Under 2.5, Gol/No Gol, risultato esatto tra i primi 3,
+    e quanti gol ha fatto e subito ogni squadra rispetto a quelli attesi. Campionati: tutte le stagioni
+    verificate. Squadre: ultime `stagioni_squadre` stagioni, solo quelle che giocano ora nei campionati coperti.
+    """
+    codici = sorted({r["cod"] for r in grezze})
+    recenti = set(codici[-stagioni_squadre:])
+    acc_l = defaultdict(lambda: defaultdict(float))
+    acc_s = defaultdict(lambda: defaultdict(float))
+    for r in grezze:
+        lc, lo = smorza(r["lc"], r["lo"], r["tot_lega"], gamma)
+        P0 = matrice(lc, lo, r["rho"])
+        p = probabilita(P0)
+        o25 = calib(curve.get("O25"), p["O25"])
+        gg = calib(curve.get("GG"), p["GG"])
+        P = allinea(P0, o25, gg)
+        mc = sum(i * P[i][j] for i in range(11) for j in range(11))
+        mo = sum(j * P[i][j] for i in range(11) for j in range(11))
+        celle = sorted(((P[i][j], i, j) for i in range(11) for j in range(11)), reverse=True)[:3]
+        gc, go = r["gc"], r["go"]
+        esito = max(("1", "X", "2"), key=lambda k: p[k])
+        vero = "1" if gc > go else ("X" if gc == go else "2")
+        h = {"esito": esito == vero, "ou": (o25 > .5) == (gc + go > 2), "gg": (gg > .5) == (gc > 0 and go > 0),
+             "ex": any((i, j) == (gc, go) for _, i, j in celle)}
+        a = acc_l[r["lega"]]
+        a["n"] += 1
+        for k, v in h.items():
+            a[k] += v
+        a["gol_att"] += mc + mo; a["gol"] += gc + go
+        if r["cod"] in recenti:
+            for t, gf, gs, af, as_ in ((r["casa"], gc, go, mc, mo), (r["ospite"], go, gc, mo, mc)):
+                if squadre_ora.get(t) != r["lega"]:
+                    continue
+                b = acc_s[t]
+                b["n"] += 1
+                for k, v in h.items():
+                    b[k] += v
+                b["gf"] += gf; b["gs"] += gs; b["gf_att"] += af; b["gs_att"] += as_
+    pc = lambda a, k: round(100 * a[k] / a["n"], 1)
+    leghe = {l: {"n": int(a["n"]), "esito": pc(a, "esito"), "ou": pc(a, "ou"), "gg": pc(a, "gg"), "ex": pc(a, "ex"),
+                 "gol": round(a["gol"] / a["n"], 2), "gol_att": round(a["gol_att"] / a["n"], 2)}
+             for l, a in acc_l.items()}
+    squadre = {t: {"l": squadre_ora[t], "n": int(b["n"]), "esito": pc(b, "esito"), "ou": pc(b, "ou"), "gg": pc(b, "gg"),
+                   "ex": pc(b, "ex"), "gf": round(b["gf"] / b["n"], 2), "gs": round(b["gs"] / b["n"], 2),
+                   "dgf": round((b["gf"] - b["gf_att"]) / b["n"], 2), "dgs": round((b["gs"] - b["gs_att"]) / b["n"], 2)}
+               for t, b in acc_s.items() if b["n"] >= minimo}
+    return {"leghe": leghe, "squadre": squadre,
+            "stag_l": [f"20{c[:2]}/{c[2:]}" for c in codici], "stag_s": [f"20{c[:2]}/{c[2:]}" for c in sorted(recenti)]}
+
+
+def numeri_campionati(partite, cod_corr, n_prec=3):
+    """Gol, Over, Gol/Gol, 0-0, vittorie in casa: stagione in corso e ultime n_prec stagioni concluse."""
+    codici = sorted({m["stagione"] for m in partite})
+    prec = set(c for c in codici if c != cod_corr)
+    prec = set(sorted(prec)[-n_prec:])
+    acc = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    for m in partite:
+        per = "ora" if m["stagione"] == cod_corr else ("prima" if m["stagione"] in prec else None)
+        if not per:
+            continue
+        a = acc[m["lega"]][per]
+        t = m["gc"] + m["go"]
+        a["n"] += 1; a["gol"] += t; a["o15"] += t > 1; a["o25"] += t > 2; a["o35"] += t > 3
+        a["gg"] += m["gc"] > 0 and m["go"] > 0; a["zero"] += t == 0; a["casa"] += m["gc"] > m["go"]
+        a["x"] += m["gc"] == m["go"]
+    out = {}
+    for l, per in acc.items():
+        out[l] = {}
+        for k, a in per.items():
+            n = a["n"]
+            out[l][k] = {"n": int(n), "gol": round(a["gol"] / n, 2), "o15": round(100 * a["o15"] / n, 1),
+                         "o25": round(100 * a["o25"] / n, 1), "o35": round(100 * a["o35"] / n, 1),
+                         "gg": round(100 * a["gg"] / n, 1), "zero": round(100 * a["zero"] / n, 1),
+                         "casa": round(100 * a["casa"] / n, 1), "x": round(100 * a["x"] / n, 1)}
     return out
 
 
