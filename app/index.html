@@ -289,7 +289,7 @@ table.studio tbody tr{cursor:pointer}
 
   <section class="screen wrap" id="s-top" aria-label="Da guardare" hidden>
     <h1 class="h1">Partite da guardare</h1>
-    <p class="lead" id="top-lead">Stellina = uscita con probabilità alta e dati solidi. Anche al 70% un'uscita sbaglia 3 volte su 10: nessuna è sicura.</p>
+    <p class="lead" id="top-lead">Stellina = uscita che resta probabile (almeno 65%) anche nell'ipotesi più prudente sui dati. Anche al 70% un'uscita sbaglia 3 volte su 10: nessuna è sicura.</p>
     <div id="comb-box"></div>
     <div class="days" id="days-top" role="toolbar" aria-label="Giorno"></div>
     <div id="top-list"></div>
@@ -848,7 +848,7 @@ function schermoTop(){
       :'<div class="sig"><span>'+(a.liv==="alta"?"★ ":"")+'<b>••••••••••</b></span><span class="v">'+LUCC+'</span></div>')+'</button>'; };
   $("top-list").innerHTML = (ACC.premium?"":'<div style="margin-bottom:12px">'+vetrina("guarda")+'</div>')+
     (t.alte.length ? t.alte.map(scheda).join("")
-    : '<div class="empty"><b>Nessuna partita con la stellina</b>In questo giorno nessuna uscita ha insieme probabilità alta e dati solidi. Meglio nessun consiglio che uno debole.</div>')+
+    : '<div class="empty"><b>Nessuna partita con la stellina</b>In questo giorno nessuna uscita resta al 65% anche nell'ipotesi più prudente sui dati. Meglio nessun consiglio che uno debole.</div>')+
     (t.medie.length?'<div class="sec">Da tenere d\'occhio</div>'+t.medie.slice(0,6).map(scheda).join(""):"");
   $("top-list").querySelectorAll(".match").forEach(b=>b.addEventListener("click",()=>vai("#m/"+b.dataset.i)));
   const RK=[["gol","Più gol"],["pochi","Meno gol"],["angoli","Più angoli"],["cart","Più cartellini"],["tiri","Più tiri"]];
