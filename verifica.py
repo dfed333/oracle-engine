@@ -209,7 +209,7 @@ def riassunto_verifica(partite, leghe):
     out = {"gamma": gamma, "n": cal["n"], "acc1x2": cal["acc1x2"], "brier": cal["brier"],
            "stagioni": [f"20{c[:2]}/{c[2:]}" for c in cal["stagioni"]],
            "tab": cal["tab"],
-           "curve": {k: mappa_isotonica(cal["tab"][k]) for k in ("O25", "GG")},
+           "curve": {k: mappa_isotonica(cal["tab"][k]) for k in ("O25", "GG", "1", "X", "2")},
            "esatto1": round(esatti1, 4), "esatto3": round(esatti3, 4)}
     out.update(deriva(partite, leghe))
     out["_grezze"] = grezze          # servono a prevedibilita(); build.py le toglie prima di pubblicare
@@ -237,6 +237,13 @@ def calib(curva, p):
     return cl(p + (z[1] - z[0]))
 
 
+def p1x2(curve, p):
+    """1, X, 2 corretti con la verifica sul passato e riportati a somma 1 (copia di p1x2() dell'app)."""
+    v = [calib(curve.get(k), p[k]) for k in ("1", "X", "2")]
+    t = sum(v)
+    return [x / t for x in v] if t > 0 else [p["1"], p["X"], p["2"]]
+
+
 def _classe(i, j):
     return (0 if i > j else (1 if i == j else 2)) * 4 + (2 if i + j > 2 else 0) + (1 if i and j else 0)
 
@@ -244,7 +251,7 @@ def _classe(i, j):
 CLASSI = [[_classe(i, j) for j in range(11)] for i in range(11)]
 
 
-def allinea(P0, tO, tG):
+def allinea(P0, t1x2, tO, tG):
     """
     Come allinea() dell'app (raking su 1X2, Over 2.5, Gol/Gol). Le celle con lo stesso esito, lo stesso
     Over/Under e lo stesso Gol/No Gol ricevono sempre lo stesso fattore: basta lavorare sui 12 totali.
@@ -255,7 +262,7 @@ def allinea(P0, tO, tG):
             T[CLASSI[i][j]] += P0[i][j]
     f = [1.0] * 12
     tot = sum(T)
-    t1 = [sum(T[k] for k in range(12) if k // 4 == e) for e in range(3)]
+    t1 = [tot * x for x in t1x2]
     obiettivi = [(lambda k: k // 4, t1), (lambda k: (k >> 1) & 1, [tot * (1 - tO), tot * tO]),
                  (lambda k: k & 1, [tot * (1 - tG), tot * tG])]
     for _ in range(40):
@@ -274,6 +281,55 @@ def allinea(P0, tO, tG):
 
 
 SOGLIE_SICURO = (0.55, 0.60, 0.65, 0.70)
+TETTI = (1.0, 0.90, 0.85)
+MG_TOT = [(1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (2, 3), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6), (4, 5), (4, 6)]
+MG_SQ = [(0, 1), (1, 2), (1, 3), (2, 3), (1, 4), (2, 4)]
+
+
+def _mercati_gen():
+    m = {"1": lambda i, j: i > j, "X": lambda i, j: i == j, "2": lambda i, j: i < j,
+         "1X": lambda i, j: i >= j, "X2": lambda i, j: i <= j, "12": lambda i, j: i != j,
+         "GG": lambda i, j: i > 0 and j > 0, "NG": lambda i, j: not (i > 0 and j > 0)}
+    for L in (0.5, 1.5, 2.5, 3.5, 4.5):
+        m[f"O{L}"] = (lambda L: lambda i, j: i + j > L)(L)
+        m[f"U{L}"] = (lambda L: lambda i, j: i + j < L)(L)
+    for a, b in MG_TOT:
+        m[f"MG{a}-{b}"] = (lambda a, b: lambda i, j: a <= i + j <= b)(a, b)
+    for a, b in MG_SQ:
+        m[f"MGC{a}-{b}"] = (lambda a, b: lambda i, j: a <= i <= b)(a, b)
+        m[f"MGO{a}-{b}"] = (lambda a, b: lambda i, j: a <= j <= b)(a, b)
+    return m
+
+
+MERCATI_GEN = _mercati_gen()
+
+
+def probabilita_mercati(P):
+    """Probabilità di ogni mercato delle combinazioni dalla matrice (allineata) dei risultati."""
+    tot, casa, osp = [0.0] * 21, [0.0] * 11, [0.0] * 11
+    p1 = px = p2 = gg = 0.0
+    for i in range(11):
+        for j in range(11):
+            v = P[i][j]
+            tot[i + j] += v; casa[i] += v; osp[j] += v
+            if i > j:
+                p1 += v
+            elif i == j:
+                px += v
+            else:
+                p2 += v
+            if i and j:
+                gg += v
+    out = {"1": p1, "X": px, "2": p2, "1X": p1 + px, "X2": px + p2, "12": p1 + p2, "GG": gg, "NG": 1 - gg}
+    s = sum(tot)
+    for L in (0.5, 1.5, 2.5, 3.5, 4.5):
+        u = sum(tot[: int(L) + 1])
+        out[f"U{L}"] = u; out[f"O{L}"] = s - u
+    for a, b in MG_TOT:
+        out[f"MG{a}-{b}"] = sum(tot[a:b + 1])
+    for a, b in MG_SQ:
+        out[f"MGC{a}-{b}"] = sum(casa[a:b + 1]); out[f"MGO{a}-{b}"] = sum(osp[a:b + 1])
+    return out
 
 
 def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=30):
@@ -288,30 +344,42 @@ def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=
     acc_l = defaultdict(lambda: defaultdict(float))
     acc_s = defaultdict(lambda: defaultdict(float))
     acc_m = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+    ver_scelte = {c: defaultdict(lambda: [0, 0, 0.0]) for c in TETTI}
+    ver_esatti = {K: defaultdict(lambda: [0, 0, 0.0]) for K in (3, 4, 5)}
     for r in grezze:
         lc, lo = smorza(r["lc"], r["lo"], r["tot_lega"], gamma)
         P0 = matrice(lc, lo, r["rho"])
         p = probabilita(P0)
         o25 = calib(curve.get("O25"), p["O25"])
         gg = calib(curve.get("GG"), p["GG"])
-        P = allinea(P0, o25, gg)
+        q1, qx, q2 = p1x2(curve, p)
+        P = allinea(P0, (q1, qx, q2), o25, gg)
+        pc_ = {"1": q1, "X": qx, "2": q2}
         mc = sum(i * P[i][j] for i in range(11) for j in range(11))
         mo = sum(j * P[i][j] for i in range(11) for j in range(11))
         celle = sorted(((P[i][j], i, j) for i in range(11) for j in range(11)), reverse=True)[:3]
         gc, go = r["gc"], r["go"]
-        esito = max(("1", "X", "2"), key=lambda k: p[k])
+        esito = max(("1", "X", "2"), key=lambda k: pc_[k])
         vero = "1" if gc > go else ("X" if gc == go else "2")
         h = {"esito": esito == vero, "ou": (o25 > .5) == (gc + go > 2), "gg": (gg > .5) == (gc > 0 and go > 0),
              "ex": any((i, j) == (gc, go) for _, i, j in celle)}
         # mercati con il modello "sicuro": stessa probabilità che l'app mostra (1X2 dalla matrice, Over e Gol/Gol verificati)
         mk = acc_m[r["lega"]]
-        for chiave, prob, uscito in (("1", p["1"], gc > go), ("X", p["X"], gc == go), ("2", p["2"], gc < go),
+        for chiave, prob, uscito in (("1", q1, gc > go), ("X", qx, gc == go), ("2", q2, gc < go),
                                      ("O25", o25, gc + go > 2), ("U25", 1 - o25, gc + go <= 2),
                                      ("GG", gg, gc > 0 and go > 0), ("NG", 1 - gg, not (gc > 0 and go > 0))):
             for soglia in SOGLIE_SICURO:
                 if prob >= soglia:
                     v = mk[(chiave, soglia)]; v[0] += 1; v[1] += uscito
         mk[("tot", 0)][0] += 1
+        pm = probabilita_mercati(P)
+        for cap in TETTI:
+            k = max((k for k in pm if pm[k] <= cap), key=lambda k: pm[k])
+            v = ver_scelte[cap][int(min(pm[k], .999) / .05)]; v[0] += 1; v[1] += MERCATI_GEN[k](gc, go); v[2] += pm[k]
+        celle_k = sorted(((P[i][j], i, j) for i in range(11) for j in range(11)), reverse=True)
+        for K in (3, 4, 5):
+            cop = sum(c[0] for c in celle_k[:K])
+            v = ver_esatti[K][int(min(cop, .999) / .05)]; v[0] += 1; v[1] += any((i, j) == (gc, go) for _, i, j in celle_k[:K]); v[2] += cop
         a = acc_l[r["lega"]]
         a["n"] += 1
         for k, v in h.items():
@@ -339,7 +407,11 @@ def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=
         tot = mk[("tot", 0)][0]
         mercati[l] = {f"{k}|{int(sg * 100)}": [v[0], round(100 * v[1] / v[0], 1), round(100 * v[0] / tot, 1)]
                       for (k, sg), v in mk.items() if k != "tot" and v[0]}
+    fasce = lambda acc: [[f * 5, v[0], round(100 * v[2] / v[0], 1), round(100 * v[1] / v[0], 1)]
+                         for f, v in sorted(acc.items()) if v[0] >= 100]
     return {"leghe": leghe, "squadre": squadre, "mercati": mercati,
+            "ver_scelte": {str(int(c * 100)): fasce(a) for c, a in ver_scelte.items()},
+            "ver_esatti": {str(K): fasce(a) for K, a in ver_esatti.items()},
             "stag_l": [f"20{c[:2]}/{c[2:]}" for c in codici], "stag_s": [f"20{c[:2]}/{c[2:]}" for c in sorted(recenti)]}
 
 
