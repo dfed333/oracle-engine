@@ -193,13 +193,17 @@ class Nomi:
     @staticmethod
     def _punti(q, c):
         """Quanto il nome cercato q somiglia al candidato c (liste di parole). 0 = non è lui."""
-        forti_q = {x for x in q if x not in PARTICELLE and len(x) > 1}
-        forti_c = {x for x in c if x not in PARTICELLE and len(x) > 1}
+        # cognomi in comune (il nome di battesimo non conta: "Luís" da solo non basta)
+        forti_q = {x for x in q[1:] if x not in PARTICELLE and len(x) > 1}
+        forti_c = {x for x in c[1:] if x not in PARTICELLE and len(x) > 1}
         comuni = len(forti_q & forti_c)
         if len(q) >= 2 and len(q[0]) == 1:                       # "M Oliver": iniziale + cognome
             return 3 if q[-1] in c[1:] and c[0][0] == q[0] else 0
-        if comuni >= 2 and q[0][0] == c[0][0]:
+        if comuni >= 2 and q[0][0] == c[0][0]:                   # "José Sánchez Martínez" ↔ "José María Sánchez Martínez"
             return 2 + comuni
+        corto, lungo = (q, c) if len(q) < len(c) else (c, q)
+        if len(corto) >= 3 and lungo[:len(corto)] == corto:      # "Hakim Ben El Hadj" ↔ "Hakim Ben El Hadj Salem"
+            return 2
         if len(q) >= 2 and q[1:] == c[1:] and _stesso_nome(q[0], c[0]):     # "Sam Allison" ↔ "Samuel Allison"
             return 2
         if len(q) >= 3 and " ".join(c).startswith(" ".join(q[1:]) + " "):   # cognomi senza nome di battesimo
