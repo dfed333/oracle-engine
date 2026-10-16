@@ -621,6 +621,7 @@ def carica_partite():
                     "tip_c": _to_int(riga.get("HST")), "tip_o": _to_int(riga.get("AST")),
                     "fal_c": _to_int(riga.get("HF")), "fal_o": _to_int(riga.get("AF")),
                     "xg_c": _to_float(riga.get("HxG")), "xg_o": _to_float(riga.get("AxG")),
+                    "arb": (riga.get("Referee") or "").strip() or None,
                     "stagione": cod,
                 })
                 conteggi[lega] += 1

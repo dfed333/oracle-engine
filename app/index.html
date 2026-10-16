@@ -205,12 +205,31 @@ tr.hl td{background:var(--ac-d)}
 .note{font-size:12px;color:var(--mu);margin-top:10px;line-height:1.5}
 .warn{background:rgba(245,181,68,.09);border:1px solid rgba(245,181,68,.28);border-radius:12px;padding:10px 12px;font-size:13px}
 .foot{color:var(--mu2);font-size:11px;text-align:center;margin:26px 0 6px;line-height:1.6}
-.lock{position:relative;border-radius:14px;overflow:hidden;min-height:170px;margin-top:8px}
-.lock-c{filter:blur(7px);opacity:.45;pointer-events:none;user-select:none}
-.lock-o{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  text-align:center;padding:18px;background:linear-gradient(180deg,rgba(10,15,36,.1),rgba(10,15,36,.82) 60%)}
-.lock-o b{font-size:16px}
-.lock-o span{color:var(--mu);font-size:12.5px;max-width:34ch}
+/* vetrina della versione completa: invito in alto, sotto l'anteprima vera con le metriche leggibili e i numeri sfocati */
+.vet{position:relative;margin-top:10px;border-radius:16px;padding:16px 16px 14px;overflow:hidden;
+  background:radial-gradient(130% 120% at 100% 0%,rgba(52,211,153,.24),transparent 55%),linear-gradient(160deg,#12274f,#0d1636);
+  border:1px solid rgba(52,211,153,.38);box-shadow:0 12px 30px rgba(0,0,0,.35)}
+.vet .tag{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+  color:#05271a;background:var(--win);padding:4px 9px;border-radius:999px}
+.vet h3{margin:10px 0 3px;font-family:var(--disp);font-size:24px;line-height:1.08;letter-spacing:.2px}
+.vet .sub{margin:0;color:#b9c3e6;font-size:13px}
+.vet ul{list-style:none;padding:0;margin:12px 0 14px;display:grid;gap:8px}
+.vet li{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;font-weight:600;line-height:1.35}
+.vet li svg{flex:0 0 18px;margin-top:1px}
+.btn-pro{display:flex;width:100%;align-items:center;justify-content:center;gap:8px;padding:14px 16px;border-radius:13px;
+  background:linear-gradient(90deg,#34d399,#a3e635);color:#05271a;font-weight:800;font-size:16px;box-shadow:0 8px 22px rgba(52,211,153,.32)}
+.btn-pro:active{transform:translateY(1px)}
+.anteprima{position:relative;pointer-events:none;user-select:none;-webkit-user-select:none}
+.anteprima .x{filter:blur(4.5px)}
+.anteprima .x0{color:var(--win)!important} .anteprima .x1{color:var(--ac)!important} .anteprima .x2{color:var(--pick)!important}
+.anteprima::after{content:"";position:absolute;left:0;right:0;bottom:0;height:90px;background:linear-gradient(rgba(10,15,36,0),var(--bg))}
+.vet-fine{margin-top:4px;position:relative;z-index:1}
+.arb-l{display:flex;justify-content:center;margin-top:12px}
+.arb-l button{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--mu);padding:6px 12px;border-radius:999px;background:var(--sf2);border:1px solid var(--line2)}
+.arb-l b{color:var(--tx)}
+.seg2{display:flex;background:var(--sf);border:1px solid var(--line);border-radius:12px;padding:3px;margin:2px 0 14px}
+.seg2 button{flex:1;padding:9px 6px;border-radius:9px;font-weight:700;color:var(--mu)}
+.seg2 button[aria-pressed="true"]{background:var(--sf3);color:var(--tx)}
 .lucc{display:inline-block;vertical-align:-1px}
 .chiave{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:800;
   background:var(--pick-d);color:var(--pick);border:1px solid rgba(245,181,68,.4)}
@@ -268,11 +287,20 @@ tr.hl td{background:var(--ac-d)}
   </section>
 
   <section class="screen wrap" id="s-all" aria-label="Allenatori" hidden>
-    <h1 class="h1">Allenatori</h1>
+    <h1 class="h1" id="all-h1">Allenatori</h1>
+    <div class="seg2" id="all-vista" role="toolbar" aria-label="Allenatori o arbitri"><button data-v="all" aria-pressed="true">Allenatori</button><button data-v="arb" aria-pressed="false">Arbitri</button></div>
+    <div id="all-box">
     <p class="lead">I numeri veri di ogni allenatore, partita per partita, ricostruiti dallo storico delle panchine.</p>
     <div class="sug"><input type="search" id="all-q" placeholder="Cerca: es. “con” → Antonio Conte" autocomplete="off" aria-label="Cerca allenatore"><div class="sug-list" id="all-sug" hidden></div></div>
     <div class="chips" id="all-leghe" style="margin-top:12px" role="toolbar" aria-label="Campionato"></div>
     <div id="all-list" class="stack" style="margin-top:6px"></div>
+    </div>
+    <div id="arb-box" hidden>
+    <p class="lead">Ogni arbitro: partite dirette, cartellini, rossi, rigori e falli fischiati a partita, confrontati con la media dei campionati che ha arbitrato.</p>
+    <input type="search" id="arb-q" placeholder="Cerca un arbitro: es. “orsa” → Daniele Orsato" autocomplete="off" aria-label="Cerca arbitro">
+    <div class="chips" id="arb-leghe" style="margin-top:12px" role="toolbar" aria-label="Campionato"></div>
+    <div id="arb-list" class="stack" style="margin-top:6px"></div>
+    </div>
   </section>
 
   <section class="screen wrap" id="s-sim" aria-label="Simula" hidden>
@@ -322,7 +350,7 @@ const pct = (p, d = 0) => (100 * p).toFixed(d) + "%";
 const M = ["att", "dif", "corF", "corA", "cart"];
 const K_CAR = 40, CAP = {att: .15, dif: .05, corF: .22, corA: .31, cart: .07};   // aggiornato da data.json (misurato sui cambi di panchina)
 let D = null;                      // dati
-const STATO = {giorno: null, comp: "Tutte", lega: null, rank: "gol", allLega: "Tutti"};
+const STATO = {giorno: null, comp: "Tutte", lega: null, rank: "gol", allLega: "Tutti", vista: "all", arbLega: "Tutti", arbQ: ""};
 const CACHE = new Map();           // calcoli per partita
 
 /* ---------------- colori stemmi ---------------- */
@@ -454,14 +482,17 @@ function calcola(f, opt){
   const muCC=corC0*pc.corF*po.corA*at.corC*dom, muCO=corO0*po.corF*pc.corA*at.corO/dom;
   const der=derby(f.c,f.o), boost=der?der[1]:1;
   const aggr=x=>1+.5*(clamp(x,.7,1.4)-1);
-  const muKC=carC0*pc.cart*aggr(po.cart)*at.cart*boost, muKO=carO0*po.cart*aggr(pc.cart)*at.cart*boost;
+  // arbitro designato: quanti cartellini dà rispetto a un arbitro medio (credibilità: partite recenti / (partite + 10))
+  const arb=f.ar&&D.AR?D.AR[f.ar]:null, fArb=arb&&arb.f?clamp(arb.f,.7,1.4):1;
+  const muKC=carC0*pc.cart*aggr(po.cart)*at.cart*boost*fArb, muKO=carO0*po.cart*aggr(pc.cart)*at.cart*boost*fArb;
   // tiri attesi (medie reali squadra × concessi dall'avversaria / media lega)
   let tiri=null; const tc=qc.t, to=qo.t;
   if(tc&&to&&tc.t&&to.t&&Lc&&Lo&&Lc.x.t&&Lo.x.t){ const mt=(Lc.x.t+Lo.x.t)/4, mp=(Lc.x.p+Lo.x.p)/4;
-    tiri={c:tc.t*to.ts/mt, o:to.t*tc.ts/mt, pc:tc.p*to.ps/mp, po:to.p*tc.ps/mp}; }
+    const ft=((Lc.x.ft||1)+(Lo.x.ft||1))/2, fp=((Lc.x.fp||1)+(Lo.x.fp||1))/2;   // livello della stagione in corso
+    tiri={c:tc.t*to.ts/mt*ft, o:to.t*tc.ts/mt*ft, pc:tc.p*to.ps/mp*fp, po:to.p*tc.ps/mp*fp}; }
   const stimati = !!(qc.solo||qo.solo||qc.cs||qo.cs);
   const r={ok:true,mc:false,key,f,lamC,lamO,rho,P,p1,px,p2,gg,ov,celle,base,at,st_c,st_o,all_c,all_o,pc,po,
-    muCC,muCO,muKC,muKO,der,h2h,tiri,stimati,opt,grezzi};
+    muCC,muCO,muKC,muKO,der,h2h,tiri,stimati,opt,grezzi,arb:arb?{nome:f.ar,f:fArb}:null};
   r.o25=calib("O25",ov[2.5]); r.ggc=calib("GG",gg);
   CACHE.set(key,r); return r; }
 
@@ -602,13 +633,67 @@ function apriSblocco(esito){
     else $("sb-msg").innerHTML='<p class="msg-ko">Codice non valido o non più attivo. Controlla di averlo scritto bene.</p>'; };
 }
 document.addEventListener("click",ev=>{ const t=ev.target.closest("[data-sblocca]"); if(t){ ev.preventDefault(); ev.stopPropagation(); apriSblocco(); } },true);
-/* contenuto avanzato: per chi non ha il codice resta sfocato, con i numeri mescolati */
-function premium(html,cosa){
+/* vetrina della versione completa: cosa c'è dentro, scritto chiaro, e il tasto subito in vista */
+const SPUNTA='<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#34d399"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#05271a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function vetrine(){
+  const n=(D.V&&D.V.n?D.V.n:30000).toLocaleString("it-IT"), all=(D.meta&&D.meta.allenatori||1000).toLocaleString("it-IT");
+  return {
+    pron:["Il pronostico completo di questa partita","Non solo le percentuali: quanto fidarsi e perché.",
+      ["L'affidabilità in % di questa partita, verificata su "+n+" partite passate","Le 3 uscite più probabili, con la percentuale di ognuna","I risultati esatti più probabili e quanti gol aspettarsi","Perché il modello la vede così e quanto pesa ogni dato"]],
+    gol:["Scheda Gol completa","Tutti i numeri sui gol di questa partita.",
+      ["I 9 risultati esatti più probabili","Over/Under da 0.5 a 4.5 gol, Gol/Gol e No Gol","Gol attesi per squadra ed expected goals (xG) della stagione","Le fasce di gol più probabili, da 0 a 5+"]],
+    ang:["Scheda Angoli completa","Quanti calci d'angolo aspettarsi, linea per linea.",
+      ["Angoli attesi per ciascuna squadra e in totale","Over/Under su ogni linea, con la più equilibrata evidenziata","Angoli battuti e concessi in media dalle due squadre","Calcolati su 10.000 simulazioni della partita"]],
+    car:["Scheda Cartellini completa","Quanto sarà nervosa la partita.",
+      ["L'arbitro designato: cartellini, rossi, rigori e falli fischiati a partita","Cartellini attesi in totale, confrontati con la media del campionato","Over/Under su ogni linea dei cartellini","Gialli, rossi e falli medi delle due squadre, derby e partite calde"]],
+    arbitro:["Scheda dell'arbitro","Com'è davvero questo arbitro, partita dopo partita.",
+      ["Cartellini e rossi a partita, contro la media dei campionati che ha arbitrato","Rigori e falli fischiati a partita","Stagione per stagione: se sta diventando più severo o lascia giocare","Quanto sposta i cartellini attesi delle sue partite"]],
+    tiri:["Scheda Tiri completa","Chi tirerà di più e quanto arriverà in porta.",
+      ["Tiri attesi per ciascuna squadra","Tiri in porta attesi per ciascuna squadra","Tiri fatti e concessi in media dalle due squadre"]],
+    all:["Analisi degli allenatori","I numeri veri degli ultimi 10 anni di chi va in panchina.",
+      ["Vittorie, gol fatti e subiti, Over 2.5 e Gol/Gol di ogni allenatore","Angoli e cartellini delle sue squadre","Quanto pesa l'allenatore in questo pronostico, in base alle partite in panchina","Lo stile di gioco e lo scontro di stili"]],
+    carriera:["Numeri dell'allenatore","10 anni di carriera, squadra per squadra.",
+      ["Vittorie, pareggi e sconfitte in %","Gol fatti e subiti, Over 2.5 e Gol/Gol a partita","Angoli e cartellini delle sue squadre","Il rendimento in ogni squadra allenata e in coppa europea"]],
+    sim:["Simula qualsiasi partita","Scegli due squadre, anche di campionati diversi.",
+      ["Pronostico completo per qualsiasi incrocio","Gol, angoli, cartellini e tiri attesi","Cambia allenatore, stile o assenze e guarda come cambia"]],
+    rank:["Classifica del giorno","Le partite del giorno ordinate per numeri.",
+      ["Le partite con più gol attesi","Le partite con più angoli, cartellini o tiri attesi"]],
+    guarda:["Le partite da guardare, con l'uscita","Qui vedi quali partite hanno la stellina: con la versione completa vedi quale uscita indicano e perché.",
+      ["L'uscita indicata per ogni partita con la stellina","L'affidabilità in % e i motivi","Le statistiche complete di ogni partita"]],
+    tutto:["Versione completa","Sblocca tutte le analisi.",["Affidabilità, uscite e analisi di ogni partita"]],
+  };
+}
+function vetrina(chiave){
+  const v=vetrine()[chiave]||vetrine().tutto;
+  return '<div class="vet"><span class="tag">'+LUCC+' Versione completa</span><h3>'+esc(v[0])+'</h3><p class="sub">'+esc(v[1])+'</p>'+
+    '<ul>'+v[2].map(x=>'<li>'+SPUNTA+'<span>'+esc(x)+'</span></li>').join("")+'</ul>'+
+    '<button class="btn-pro" data-sblocca>'+LUCC+' Sblocca tutto</button></div>'; }
+/* anteprima: la scheda vera, con i nomi delle metriche leggibili e i numeri mescolati e sfocati (colorati) */
+function anteprima(html){
+  const t=document.createElement("template"); t.innerHTML=html; const c=t.content;
+  c.querySelectorAll(".seg").forEach(e=>{ e.textContent="••••••"; e.classList.add("x","x0"); });
+  c.querySelectorAll(".why li").forEach(e=>e.classList.add("x"));
+  const tieni=".sec,th,.k,.lg", w=document.createTreeWalker(c,NodeFilter.SHOW_TEXT), nodi=[];
+  while(w.nextNode()) nodi.push(w.currentNode);
+  let i=0;
+  for(const n of nodi){
+    if(!/\d/.test(n.nodeValue)) continue;
+    const el=n.parentElement; if(!el) continue;
+    const td=el.closest("td");
+    if(el.closest(tieni)||(td&&td.cellIndex===0)) continue;
+    n.nodeValue=n.nodeValue.replace(/\d/g,()=>Math.floor(Math.random()*10));
+    if(!el.classList.contains("x")) el.classList.add("x","x"+(i++%3));
+  }
+  c.querySelectorAll("[style]").forEach(e=>{ if(/width:\s*[\d.]+%/.test(e.getAttribute("style"))) e.style.width=(18+Math.random()*64).toFixed(0)+"%"; });
+  c.querySelectorAll("tbody").forEach(tb=>{ const hl=tb.querySelector("tr.hl"), righe=tb.querySelectorAll("tr");   // la riga evidenziata direbbe la linea giusta
+    if(hl&&righe.length){ hl.classList.remove("hl"); righe[Math.floor(Math.random()*righe.length)].classList.add("hl"); } });
+  c.querySelectorAll("input,select,button,textarea").forEach(e=>{ e.setAttribute("tabindex","-1"); e.disabled=true; });
+  const d=document.createElement("div"); d.appendChild(c); return d.innerHTML; }
+/* contenuto avanzato: per chi non ha il codice, la vetrina in alto e sotto l'anteprima sfocata */
+function premium(html,chiave){
   if(ACC.premium) return html;
-  const mescolato=html.replace(/>([^<]*)</g,(m,t)=>">"+t.replace(/\d/g,()=>Math.floor(Math.random()*10))+"<");
-  return '<div class="lock"><div class="lock-c" aria-hidden="true">'+mescolato+'</div><div class="lock-o">'+
-    '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'+
-    '<b>'+esc(cosa)+'</b><span>Fa parte della versione completa.</span><button class="btn" data-sblocca>Sblocca tutto</button></div></div>'; }
+  return vetrina(chiave)+'<div class="anteprima" aria-hidden="true">'+anteprima(html)+'</div>'+
+    '<div class="vet-fine"><button class="btn-pro" data-sblocca>'+LUCC+' Sblocca tutto</button></div>'; }
 
 /* ---------------- avvio ---------------- */
 async function avvio(){
@@ -620,8 +705,8 @@ async function avvio(){
   STATO.giorno=giornoIniziale();
   await caricaAccesso();
   if(D.CAP) Object.assign(CAP,D.CAP);
-  applicaOverride(); preparaAllenatori(); preparaSimula();
-  if(!ACC.premium){ const w=$("sim-wrap"); w.innerHTML=premium(w.innerHTML,"Simula qualsiasi partita"); }
+  applicaOverride(); preparaAllenatori(); preparaArbitri(); preparaSimula();
+  if(!ACC.premium){ const w=$("sim-wrap"); w.innerHTML=premium(w.innerHTML,"sim"); }
   window.addEventListener("hashchange",router); router();
 }
 function giornoIniziale(){ const oggi=dkey(new Date()); const giorni=new Set(D.F.map(f=>f.day));
@@ -632,10 +717,11 @@ function vai(h){ if(location.hash!==h) location.hash=h; else router(); }
 function router(){
   const h=location.hash.slice(1)||"partite", parti=h.split("/");
   const sheet=$("sheet");
-  if(parti[0]==="m"||parti[0]==="a"||parti[0]==="sim"&&parti.length>1){
+  if(parti[0]==="m"||parti[0]==="a"||parti[0]==="r"||parti[0]==="sim"&&parti.length>1){
     sheet.hidden=false; document.body.style.overflow="hidden";
     if(parti[0]==="m") schedaPartita(+parti[1]);
     else if(parti[0]==="a") schedaAllenatore(decodeURIComponent(parti.slice(1).join("/")));
+    else if(parti[0]==="r") schedaArbitro(decodeURIComponent(parti.slice(1).join("/")));
     else schedaSimulata(parti.slice(1).map(decodeURIComponent));
     sheet.scrollTop=0; return;
   }
@@ -643,10 +729,12 @@ function router(){
   const scr=["partite","top","leghe","all","sim"].includes(parti[0])?parti[0]:"partite";
   for(const s of ["partite","top","leghe","all","sim"]) $("s-"+s).hidden = s!==scr;
   document.querySelectorAll(".nav button").forEach(b=>b.setAttribute("aria-current",b.dataset.go===scr?"page":"false"));
-  if(scr==="partite") schermoPartite(); else if(scr==="top") schermoTop(); else if(scr==="leghe") schermoLeghe(); else if(scr==="all") schermoAllenatori();
+  if(scr==="partite") schermoPartite(); else if(scr==="top") schermoTop(); else if(scr==="leghe") schermoLeghe(); else if(scr==="all") vistaAllenatori();
 }
 document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",()=>vai("#"+b.dataset.go)));
 function chiudi(){ if(history.length>1) history.back(); else vai("#partite"); }
+/* link interni senza onclick: data-vai="#a/…" (i nomi con l'apostrofo, es. O'Neill, rompevano l'onclick) */
+document.addEventListener("click",ev=>{ const t=ev.target.closest("[data-vai]"); if(t&&!t.disabled){ ev.preventDefault(); vai(t.dataset.vai); } });
 
 /* ---------------- PARTITE ---------------- */
 function stripGiorni(el,onSel){
@@ -726,7 +814,7 @@ function schermoTop(){
       (ACC.premium?'<div class="sig"><span>'+(a.liv==="alta"?"★ ":"")+'<b>'+esc(a.pr.lab)+'</b></span><span class="v num">'+pct(a.val)+'</span></div>'+
       '<ul class="why" style="margin-top:10px">'+motivoSegnale(x.r).slice(0,3).map(m=>'<li>'+m+'</li>').join("")+'</ul>'
       :'<div class="sig"><span>'+(a.liv==="alta"?"★ ":"")+'<b>••••••••••</b></span><span class="v">'+LUCC+'</span></div>')+'</button>'; };
-  $("top-list").innerHTML = (ACC.premium?"":'<div class="card" style="margin-bottom:10px"><b>Uscita, affidabilità e motivi sono nella versione completa.</b><p class="note">Qui vedi quali partite hanno la stellina; con il codice scopri quale uscita indicano e perché.</p><button class="btn full" style="margin-top:10px" data-sblocca>Sblocca tutto</button></div>')+
+  $("top-list").innerHTML = (ACC.premium?"":'<div style="margin-bottom:12px">'+vetrina("guarda")+'</div>')+
     (t.alte.length ? t.alte.map(scheda).join("")
     : '<div class="empty"><b>Nessuna partita sopra la soglia</b>In questo giorno nessuna uscita supera il '+Math.round(SOGLIA_ALTA*100)+'% di affidabilità. Meglio nessun consiglio che uno debole.</div>')+
     (t.medie.length?'<div class="sec">Affidabilità media ('+Math.round(SOGLIA_MEDIA*100)+'–'+Math.round(SOGLIA_ALTA*100)+'%)</div>'+t.medie.slice(0,6).map(scheda).join(""):"");
@@ -738,7 +826,7 @@ function schermoTop(){
   const fmt=r=>({gol:(r.lamC+r.lamO).toFixed(2)+" gol",pochi:(r.lamC+r.lamO).toFixed(2)+" gol",angoli:(r.corC+r.corO).toFixed(1)+" angoli",cart:r.kar.toFixed(1)+" cartellini",tiri:r.tiri?(r.tiri.c+r.tiri.o).toFixed(1)+" tiri":"—"})[STATO.rank];
   const lst=D.F.filter(f=>f.day===STATO.giorno&&!f.r).map(f=>calcola(f)).filter(r=>r.ok&&val(r)>=0||r.ok&&STATO.rank==="pochi").sort((a,b)=>val(b)-val(a)).slice(0,8);
   $("rank-list").innerHTML = premium(lst.length ? lst.map((r,i)=>'<button class="match" data-i="'+r.f.i+'" style="padding:10px 12px"><div class="row"><b class="disp num" style="width:20px;color:var(--mu)">'+(i+1)+'</b><span class="grow ell">'+esc(r.f.c)+' – '+esc(r.f.o)+'</span><b class="disp num" style="font-size:17px">'+fmt(r)+'</b></div></button>').join("")
-    : '<div class="empty">Nessuna partita da giocare in questo giorno.</div>',"Classifica del giorno");
+    : '<div class="empty">Nessuna partita da giocare in questo giorno.</div>',"rank");
   $("rank-list").querySelectorAll(".match").forEach(b=>b.addEventListener("click",()=>vai("#m/"+b.dataset.i)));
 }
 function motivoSegnale(r){
@@ -789,7 +877,8 @@ function renderScheda(f,opt){
     '<div class="hero"><div class="comp">'+esc(nomeComp(f.comp))+(f.g?" · giornata "+f.g:"")+(f.gr?" · "+esc(f.gr):"")+(f.sim?"":" · "+esc(dataLunga(f.t)))+'</div>'+
     '<div class="grid"><div class="t">'+stemma(f.c,52)+'<div class="nm">'+esc(f.c)+'</div><div class="co">'+esc(allC||"allenatore n.d.")+'</div>'+forma(f.c)+'</div>'+
     '<div class="score num">'+centro+'</div>'+
-    '<div class="t">'+stemma(f.o,52)+'<div class="nm">'+esc(f.o)+'</div><div class="co">'+esc(allO||"allenatore n.d.")+'</div>'+forma(f.o)+'</div></div></div>'+
+    '<div class="t">'+stemma(f.o,52)+'<div class="nm">'+esc(f.o)+'</div><div class="co">'+esc(allO||"allenatore n.d.")+'</div>'+forma(f.o)+'</div></div>'+
+    (f.ar?'<div class="arb-l"><button data-vai="#r/'+esc(encodeURIComponent(f.ar))+'">'+FISCHIO+' Arbitro: <b>'+esc(f.ar)+'</b></button></div>':"")+'</div>'+
     (r.ok?'<div class="tabs" role="tablist">'+tabs.map(([k,l])=>'<button class="tab" role="tab" data-t="'+k+'" aria-selected="'+(k===TAB)+'">'+l+'</button>').join("")+'</div><div class="pane" id="pane"></div>'
       :'<div class="card" style="margin-top:14px"><b>Pronostico non disponibile</b><p class="note">Almeno una delle due squadre non è nel database (né nei campionati coperti né nello storico delle coppe europee). Non inventiamo numeri.</p></div>')+
     '<p class="foot">Modello probabilistico su dati reali: nessuna previsione è garantita. Gioca responsabilmente · 18+</p></div></div>';
@@ -815,7 +904,7 @@ function disegnaTab(f,opt){
     const a=affid(r), vs=verificaStorica(a.pr), col=a.liv==="alta"?"var(--pick)":(a.liv==="media"?"var(--ac)":"var(--mu2)");
     const aff='<div class="card" style="margin-top:8px;border-color:'+(a.liv==="alta"?"rgba(245,181,68,.45)":"var(--line)")+'">'+
       '<div class="row"><div class="grow"><div class="tiny muted" style="font-weight:700;letter-spacing:1px;text-transform:uppercase">Affidabilità</div>'+
-      '<div class="small" style="margin-top:3px">'+(a.liv==="alta"?"★ Da guardare: ":"")+'<b>'+esc(a.pr.lab)+'</b></div></div>'+
+      '<div class="small" style="margin-top:3px">'+(a.liv==="alta"?"★ Da guardare: ":"")+'<b class="seg">'+esc(a.pr.lab)+'</b></div></div>'+
       '<div style="text-align:right"><div class="affv num" style="color:'+col+'">'+pct(a.val)+'</div><div class="tiny" style="color:'+col+';font-weight:700">'+a.liv+'</div></div></div>'+
       '<div class="gauge"><span style="width:'+pct(a.val,1)+';background:'+col+'"></span></div>'+
       '<p class="note" style="margin-top:4px">Probabilità di questa uscita <b>'+pct(a.pr.p)+'</b>, meno il margine d\'incertezza di questa partita (<b>'+(a.margine*100).toFixed(1).replace(".",",")+'</b> punti).'+
@@ -826,7 +915,7 @@ function disegnaTab(f,opt){
     const uno='<div class="card" style="margin-top:10px"><div class="big3-l num"><span>'+esc(f.c)+'<b>'+pct(r.p1)+'</b></span><span class="x">Pareggio<b>'+pct(r.px)+'</b></span><span class="a">'+esc(f.o)+'<b>'+pct(r.p2)+'</b></span></div>'+
       '<div class="big3"><span style="width:'+pct(r.p1,1)+';background:var(--c1)"></span><span style="width:'+pct(r.px,1)+';background:var(--cx)"></span><span style="width:'+pct(r.p2,1)+';background:var(--c2)"></span></div>'+
       '<div class="row" style="margin-top:10px;justify-content:flex-end"><span class="tiny muted num">gol attesi '+r.lamC.toFixed(2)+' – '+r.lamO.toFixed(2)+'</span></div></div>';
-    const uscite='<div class="sec">Le 3 uscite più probabili</div><div class="picks">'+r.picks.slice(0,3).map((x,i)=>'<div class="pick"><span class="rk">'+(i+1)+'</span><span class="lbl">'+esc(x[0])+'</span><span class="pc num">'+pct(x[1])+'</span></div>').join("")+'</div>';
+    const uscite='<div class="sec">Le 3 uscite più probabili</div><div class="picks">'+r.picks.slice(0,3).map((x,i)=>'<div class="pick"><span class="rk">'+(i+1)+'</span><span class="lbl seg">'+esc(x[0])+'</span><span class="pc num">'+pct(x[1])+'</span></div>').join("")+'</div>';
     // le probabilità chiave (Over, Gol/Gol, gol/angoli/cartellini/tiri attesi) si vedono anche nella versione gratuita, come su Oddster
     const chiave='<div class="sec">Probabilità chiave</div><div class="kgrid">'+
       kp("Over 2.5 gol",r.o25*100,b.ov,v=>v.toFixed(0)+"%")+kp("Over 1.5 gol",r.ov[1.5]*100,r.base.tipo==="lega"?Lx.o15:null,v=>v.toFixed(0)+"%")+
@@ -837,7 +926,7 @@ function disegnaTab(f,opt){
     const reali=f.st?'<div class="sec">Statistiche reali della partita</div><div class="card">'+statReali(f)+'</div>':"";
     let resto='<div class="sec">Perché questo pronostico</div><div class="card"><ul class="why">'+motivoSegnale(r).concat(perche(r).slice(1)).map(x=>'<li>'+x+'</li>').join("")+'</ul></div>';
     resto+='<div class="sec">Quanto pesa ogni dato</div><div class="card">'+pesi(r)+'</div>';
-    p.innerHTML=ACC.premium?aff+uno+reali+uscite+chiave+resto:uno+chiave+reali+premium(aff+uscite+resto,"Affidabilità, uscite più probabili e analisi");
+    p.innerHTML=ACC.premium?aff+uno+reali+uscite+chiave+resto:uno+chiave+reali+premium(aff+uscite+resto,"pron");
   } else if(TAB==="gol"){
     let h='<div class="sec">Risultati esatti più probabili</div><div class="scores">'+r.celle.slice(0,9).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>'+notaEsatti()+'<div class="card" style="margin-top:8px">'+barreFasce(r)+'</div>';
     h+='<div class="sec">Over / Under</div><div class="card"><div class="tbl-w"><table class="num"><thead><tr><th>Linea</th><th>Over</th><th>Under</th></tr></thead><tbody>'+
@@ -845,24 +934,24 @@ function disegnaTab(f,opt){
     h+='<div class="sec">Gol per squadra</div><div class="kgrid">'+kp(esc(f.c),r.lamC,null,v=>v.toFixed(2))+kp(esc(f.o),r.lamO,null,v=>v.toFixed(2))+kp("Gol/Gol",r.ggc*100,b.gg,v=>v.toFixed(0)+"%")+kp("No Gol",(1-r.ggc)*100,b.gg!=null?100-b.gg:null,v=>v.toFixed(0)+"%")+'</div>';
     const xg=[[f.c,D.Q[f.c].t],[f.o,D.Q[f.o].t]].filter(x=>x[1]&&x[1].x!=null);
     if(xg.length) h+='<div class="sec">Expected goals stagione</div><div class="card">'+xg.map(([t,v])=>'<div class="row small" style="padding:4px 0"><span class="grow">'+esc(t)+'</span><span class="num">xG <b>'+v.x+'</b> fatti · <b>'+v.xs+'</b> concessi <span class="muted">('+v.nx+' partite)</span></span></div>').join("")+'<p class="note">Gli xG della stagione entrano nel calcolo: per le partite in cui la fonte li pubblica, il modello usa metà gol reali e metà xG, così un periodo fortunato o sfortunato pesa meno.</p></div>';
-    p.innerHTML=premium(h,"Scheda Gol");
+    p.innerHTML=premium(h,"gol");
   } else if(TAB==="ang"){
     p.innerHTML=premium('<div class="sec">Angoli attesi</div><div class="kgrid">'+kp(esc(f.c),r.corC,null,v=>v.toFixed(1))+kp(esc(f.o),r.corO,null,v=>v.toFixed(1))+'</div>'+
       '<div class="card" style="margin-top:8px"><div class="row"><span class="grow">Totale atteso</span><b class="disp num" style="font-size:22px">'+(r.corC+r.corO).toFixed(1)+'</b></div>'+(b.cor!=null&&r.base.tipo==="lega"?'<div class="tiny muted">media del campionato: '+b.cor.toFixed(1)+'</div>':"")+'</div>'+
       '<div class="sec">Linee</div><div class="card">'+tabLinee(r.corL)+'</div>'+
       '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"ang")+'</div>'+(r.stimati?'<p class="note warn">Per almeno una squadra gli angoli sono stimati: la fonte non pubblica i suoi dati.</p>':"")+
-      '<p class="note">10.000 simulazioni Monte Carlo: chi va sotto spinge e guadagna più angoli, le partite aperte ne producono di più.</p>',"Scheda Angoli");
+      '<p class="note">10.000 simulazioni Monte Carlo: chi va sotto spinge e guadagna più angoli, le partite aperte ne producono di più.</p>',"ang");
   } else if(TAB==="car"){
-    p.innerHTML=premium('<div class="sec">Cartellini attesi</div><div class="card"><div class="row"><span class="grow">Totale atteso (gialli + rossi)</span><b class="disp num" style="font-size:22px">'+r.kar.toFixed(1)+'</b></div>'+(b.cart!=null&&r.base.tipo==="lega"?'<div class="tiny muted">media del campionato: '+b.cart.toFixed(1)+'</div>':"")+(r.der?'<div class="warn" style="margin-top:10px">È il <b>'+esc(r.der[0])+'</b>: nervosismo atteso +'+Math.round((r.der[1]-1)*100)+'%.</div>':"")+'</div>'+
+    p.innerHTML=premium('<div class="sec">Arbitro</div>'+boxArbitro(f)+'<div class="sec">Cartellini attesi</div><div class="card"><div class="row"><span class="grow">Totale atteso (gialli + rossi)</span><b class="disp num" style="font-size:22px">'+r.kar.toFixed(1)+'</b></div>'+(b.cart!=null&&r.base.tipo==="lega"?'<div class="tiny muted">media del campionato: '+b.cart.toFixed(1)+'</div>':"")+(r.der?'<div class="warn" style="margin-top:10px">È il <b>'+esc(r.der[0])+'</b>: nervosismo atteso +'+Math.round((r.der[1]-1)*100)+'%.</div>':"")+'</div>'+
       '<div class="sec">Linee</div><div class="card">'+tabLinee(r.karL)+'</div>'+
-      '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"car")+'</div>',"Scheda Cartellini");
+      '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"car")+'</div>',"car");
   } else if(TAB==="tiri"){
     p.innerHTML = premium(r.tiri ? '<div class="sec">Tiri attesi</div><div class="kgrid">'+kp(esc(f.c),r.tiri.c,null,v=>v.toFixed(1))+kp(esc(f.o),r.tiri.o,null,v=>v.toFixed(1))+kp("In porta "+esc(f.c),r.tiri.pc,null,v=>v.toFixed(1))+kp("In porta "+esc(f.o),r.tiri.po,null,v=>v.toFixed(1))+'</div>'+
       '<div class="sec">Medie reali delle squadre</div><div class="card">'+medieSquadre(f,"tiri")+'</div><p class="note">Tiri della squadra × tiri concessi dall\'avversaria, rapportati alla media del campionato.</p>'
-      : '<div class="empty">La fonte non pubblica i tiri per almeno una delle due squadre.</div>',"Scheda Tiri");
+      : '<div class="empty">La fonte non pubblica i tiri per almeno una delle due squadre.</div>',"tiri");
   } else if(TAB==="all"){
     p.innerHTML=premium('<div class="stack" style="margin-top:8px">'+boxAllenatore(f,r,"C",opt)+boxAllenatore(f,r,"O",opt)+'</div>'+
-      '<div class="sec">Scontro di stili</div><div class="card small">'+esc(r.st_c)+' contro '+esc(r.st_o)+': coefficiente di attrito <b class="num">'+r.at.gol.toFixed(2)+'</b> — '+(r.at.gol>1.02?"partita che tende ad aprirsi":r.at.gol<.98?"partita che tende a bloccarsi":"ritmo nella norma")+'.</div>',"Analisi degli allenatori");
+      '<div class="sec">Scontro di stili</div><div class="card small">'+esc(r.st_c)+' contro '+esc(r.st_o)+': coefficiente di attrito <b class="num">'+r.at.gol.toFixed(2)+'</b> — '+(r.at.gol>1.02?"partita che tende ad aprirsi":r.at.gol<.98?"partita che tende a bloccarsi":"ritmo nella norma")+'.</div>',"all");
     p.querySelectorAll("[data-edit]").forEach(sel=>sel.addEventListener("change",()=>{ const o=Object.assign({},opt);
       const lato=sel.dataset.lato, k=sel.dataset.edit; let v=sel.value;
       if(k==="ass") o["ass"+lato]=+v; else if(k==="st") o["st"+lato]=v||undefined;
@@ -945,7 +1034,7 @@ function boxAllenatore(f,r,lato,opt){
   const provvisorio = opt["all"+lato]!==undefined && (opt["all"+lato]||null)!==(q.all||null);
   const salva = provvisorio ? '<button class="btn ghost full" style="margin-top:10px" data-salva="'+lato+'">Usa sempre '+esc(coach||"nessun allenatore")+' per '+esc(t)+'</button>' : "";
   const corr = q.mod&&!provvisorio ? '<div class="warn" style="margin-top:10px">Allenatore impostato da te. Secondo i dati ufficiali è <b>'+esc(q._uff||"non noto")+'</b>: quando cambieranno, la tua correzione si toglierà da sola. <button class="pill" style="margin-left:4px" data-ripristina="'+lato+'">Ripristina</button></div>' : "";
-  return '<div class="coach"><div class="row">'+stemma(t,30)+'<div class="grow"><div class="tiny muted">'+esc(t)+'</div><h3>'+esc(coach||"Allenatore non noto")+'</h3>'+(q.nota&&!q.mod&&!opt["all"+lato]?'<div class="tiny" style="color:var(--pick)">'+esc(q.nota)+'</div>':"")+'</div>'+(coach?'<button class="pill" onclick="vai(\'#a/'+encodeURIComponent(coach)+'\')">Scheda</button>':"")+'</div>'+
+  return '<div class="coach"><div class="row">'+stemma(t,30)+'<div class="grow"><div class="tiny muted">'+esc(t)+'</div><h3>'+esc(coach||"Allenatore non noto")+'</h3>'+(q.nota&&!q.mod&&!opt["all"+lato]?'<div class="tiny" style="color:var(--pick)">'+esc(q.nota)+'</div>':"")+'</div>'+(coach?'<button class="pill" data-vai="#a/'+esc(encodeURIComponent(coach))+'">Scheda</button>':"")+'</div>'+
     (c&&c.n?'<div class="stat-g num"><div><b>'+c.n+'</b><span>partite in carriera</span></div><div><b>'+c.v+'%</b><span>vittorie</span></div><div><b>'+c.gf+'</b><span>gol fatti</span></div><div><b>'+c.ov+'%</b><span>Over 2.5</span></div><div><b>'+(c.cor!=null?c.cor:"—")+'</b><span>angoli</span></div><div><b>'+(c.gia!=null?c.gia:"—")+'</b><span>gialli</span></div></div>':"")+
     (c&&c.eu?'<p class="note">In coppa europea: <b>'+c.eu[0]+'</b> partite, '+c.eu[1]+'% vittorie, '+c.eu[3]+' gol fatti e '+c.eu[4]+' subiti a partita.</p>':"")+
     (per?'<p class="note">Qui a '+esc(t)+': <b>'+per[1]+'</b> partite ('+per[2]+'% vittorie, '+per[5]+' gol fatti e '+per[6]+' subiti a partita)'+(q.dal&&coach===q.all?', in carica dal '+dataIt(q.dal):"")+'.</p>':(coach?'<p class="note">Nessuna partita di '+esc(coach)+' con '+esc(t)+' nell\'archivio: il modello usa la sua carriera altrove.</p>':""))+
@@ -975,6 +1064,67 @@ function schermoLeghe(){
 }
 
 /* ---------------- ALLENATORI ---------------- */
+/* ---------------- ARBITRI ---------------- */
+const FISCHIO='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="14" r="5"/><path d="M12.5 10.5L21 6v4l-6.5 2"/><path d="M9 4v2"/></svg>';
+const n2=(x,c)=>x==null?"—":x.toFixed(c==null?2:c).replace(".",",");
+function confr(v,c){ if(!v) return '<span class="muted">—</span>';
+  const d=(v[0]-v[1])/Math.max(v[1],1e-9), col=Math.abs(d)<.08?"var(--mu)":(d>0?"var(--pick)":"var(--ac)");
+  return '<b class="num" style="color:'+col+'">'+n2(v[0],c)+'</b><span class="tiny muted"> media '+n2(v[1],c)+'</span>'; }
+function effettoArbitro(a){ const e=Math.round((a.f-1)*100);
+  return e===0?"nella media":(e>0?"+":"")+e+"% cartellini"; }
+function righeArbitro(a){
+  return [["Cartellini a partita",confr(a.k)],["Rossi a partita",confr(a.ros,2)],["Rigori segnati a partita",confr(a.rig,2)],
+    ["Falli fischiati a partita",confr(a.fal,1)],["Gol a partita",confr(a.gol)],
+    ["Over 2.5",a.o25==null?"—":'<b class="num">'+n2(a.o25,0)+'%</b>'],["Vittorie in casa",'<b class="num">'+n2(a.v1,0)+'%</b>']]
+    .map(x=>'<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow">'+x[0]+'</span><span>'+x[1]+'</span></div>').join(""); }
+function boxArbitro(f){
+  if(!f.ar) return '<div class="card small"><b>Arbitro non ancora designato</b><p class="note">Di solito si conosce 2-3 giorni prima della partita. '+
+    (D.meta&&D.meta.arb_k?"":"Per ora gli arbitri designati arrivano solo per Premier League e campionato scozzese.")+' Le schede di tutti gli arbitri sono nella sezione Allenatori → Arbitri.</p></div>';
+  const a=D.AR&&D.AR[f.ar];
+  if(!a) return '<div class="card small"><b>'+esc(f.ar)+'</b><p class="note">Nessuna partita di questo arbitro nell\'archivio: per i cartellini conta come un arbitro medio.</p></div>';
+  return '<div class="card"><div class="row"><div class="grow"><div class="tiny muted">Arbitro designato · '+a.n+' partite dal '+a.da.slice(0,4)+'</div><h3 style="margin:2px 0 4px">'+esc(f.ar)+'</h3></div>'+
+    '<button class="pill" data-vai="#r/'+esc(encodeURIComponent(f.ar))+'">Scheda</button></div>'+righeArbitro(a)+
+    '<p class="note">Nel pronostico: <b>'+effettoArbitro(a)+'</b> rispetto a un arbitro medio. Conta di più chi ha arbitrato tanto nell\'ultimo anno (verificato su oltre 41.000 partite). I rigori dell\'arbitro invece non aiutano a prevedere quelli futuri: li mostriamo, ma non entrano nel calcolo.</p></div>'; }
+function legaArbitro(a){ return a.leghe&&a.leghe.length?a.leghe[0][0]:""; }
+function schermoArbitri(){
+  const tutti=Object.entries(D.AR||{});
+  const leghe=["Tutti",...ordineComp(new Set(tutti.map(([n,a])=>legaArbitro(a)).filter(Boolean)))];
+  $("arb-leghe").innerHTML=leghe.map(l=>'<button class="chip" data-l="'+esc(l)+'" aria-pressed="'+(l===STATO.arbLega)+'">'+esc(l==="Tutti"?"Tutti":nomeComp(l))+'</button>').join("");
+  $("arb-leghe").querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{ STATO.arbLega=b.dataset.l; schermoArbitri(); }));
+  const q=norm(STATO.arbQ), stag=new Date().getMonth()>=6?new Date().getFullYear():new Date().getFullYear()-1;
+  const lst=tutti.filter(([n,a])=>(STATO.arbLega==="Tutti"||legaArbitro(a)===STATO.arbLega)&&(!q||norm(n).includes(q)))
+    .sort((x,y)=>(y[1].corr>0)-(x[1].corr>0)||y[1].a.localeCompare(x[1].a)||y[1].n-x[1].n).slice(0,150);
+  $("arb-list").innerHTML=lst.length?lst.map(([n,a])=>'<button class="match" data-vai="#r/'+esc(encodeURIComponent(n))+'" style="padding:11px 12px"><div class="row"><span style="color:var(--mu)">'+FISCHIO+'</span><div class="grow"><b>'+esc(n)+'</b><div class="tiny muted ell">'+esc(nomeComp(legaArbitro(a)))+' · '+a.n+' partite'+(a.corr?' · '+a.corr+' in questa stagione':'')+'</div></div>'+
+    '<div style="text-align:right">'+(ACC.premium&&a.k?'<b class="disp num" style="font-size:18px">'+n2(a.k[0])+'</b><div class="tiny muted">cartellini</div>':'<span class="tiny muted">'+LUCC+' cartellini</span>')+'</div></div></button>').join("")
+    :'<div class="empty">Nessun arbitro trovato.</div>';
+}
+function preparaArbitri(){
+  $("all-vista").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ STATO.vista=b.dataset.v; vistaAllenatori(); }));
+  $("arb-q").addEventListener("input",()=>{ STATO.arbQ=$("arb-q").value; schermoArbitri(); });
+}
+function vistaAllenatori(){
+  const arb=STATO.vista==="arb";
+  $("all-vista").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===STATO.vista));
+  $("all-box").hidden=arb; $("arb-box").hidden=!arb; $("all-h1").textContent=arb?"Arbitri":"Allenatori";
+  if(arb) schermoArbitri(); else schermoAllenatori();
+}
+function schedaArbitro(nome){
+  const a=D.AR&&D.AR[nome], el=$("sheet");
+  const prossime=D.F.filter(f=>f.ar===nome&&!f.r);
+  const testa='<div class="app"><div class="wrap" style="padding-top:calc(env(safe-area-inset-top,0px) + 8px)">'+
+    '<button class="back" id="bk"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg>Indietro</button>';
+  if(!a){ el.innerHTML=testa+'<div class="empty"><b>'+esc(nome)+'</b>Nessuna partita di questo arbitro nell\'archivio dei campionati coperti.</div></div></div>'; $("bk").onclick=chiudi; return; }
+  el.innerHTML=testa+'<div class="hero" style="text-align:center"><div class="comp">'+FISCHIO+' Arbitro</div><div class="h1" style="margin-top:6px">'+esc(nome)+'</div>'+
+    '<div class="small muted">'+a.leghe.map(x=>esc(nomeComp(x[0]))+' ('+x[1]+')').join(" · ")+'</div>'+
+    '<div class="small muted" style="margin-top:4px">'+a.n+' partite nell\'archivio · dal '+dataIt(a.da)+' al '+dataIt(a.a)+(a.corr?' · '+a.corr+' in questa stagione':'')+'</div></div>'+
+    (prossime.length?'<div class="sec">Prossime partite</div><div class="stack">'+prossime.map(f=>'<button class="match" data-vai="#m/'+f.i+'" style="padding:10px 12px"><div class="row"><span class="grow ell"><b>'+esc(f.c)+' – '+esc(f.o)+'</b></span><span class="tiny muted">'+esc(dataLunga(f.t))+'</span></div></button>').join("")+'</div>':"")+
+    premium('<div class="sec">Numeri a partita</div><div class="card">'+righeArbitro(a)+'<p class="note">Media = media dei campionati e delle stagioni in cui ha arbitrato. Rigori: solo quelli segnati (la fonte non registra quelli sbagliati). Falli: dove football-data.co.uk li pubblica.</p></div>'+
+      '<div class="sec">Nel pronostico</div><div class="card small">Cartellini attesi nelle sue partite: <b>'+effettoArbitro(a)+'</b> rispetto a un arbitro medio. Il peso cresce con le partite dell\'ultimo anno (oggi equivalgono a <b>'+n2(a.pf,1)+'</b> partite piene, contro 10 "neutre").</div>'+
+      '<div class="sec">Stagione per stagione</div><div class="card" style="padding:6px 10px"><div class="tbl-w"><table class="num"><thead><tr><th style="text-align:left">Stagione</th><th>Partite</th><th>Cart.</th><th>Rossi</th><th>Rigori</th><th>Falli</th></tr></thead><tbody>'+
+      a.st.map(x=>'<tr><td style="text-align:left">'+x[0]+'</td><td>'+x[1]+'</td><td>'+n2(x[2])+'</td><td>'+n2(x[3])+'</td><td>'+n2(x[4])+'</td><td>'+n2(x[5],1)+'</td></tr>').join("")+'</tbody></table></div></div>',"arbitro")+
+    '<p class="foot">Fonti: transfermarkt-datasets (storico 2012-2026), football-data.co.uk. Gioca responsabilmente · 18+</p></div></div>';
+  $("bk").onclick=chiudi; }
+
 let IN_CARICA=[];
 function aggiornaInCarica(){ IN_CARICA=Object.entries(D.Q).filter(([t,q])=>q.all&&q.l).map(([t,q])=>({t,l:q.l,c:q.all})).sort((a,b)=>a.c.localeCompare(b.c)); }
 function preparaAllenatori(){
@@ -1013,7 +1163,7 @@ function schedaAllenatore(nome){
     (c.xg!=null?'<p class="note">xG stagione in corso: '+c.xg+' prodotti, '+c.xg_s+' concessi a partita.</p>':"")+
     (c.eu?'<p class="note">In coppa europea: <b>'+c.eu[0]+'</b> partite, '+c.eu[1]+'% vittorie, '+c.eu[2]+'% pareggi, '+c.eu[3]+' gol fatti e '+c.eu[4]+' subiti a partita.</p>':"")+
     '<div class="sec">Squadra per squadra</div><div class="card" style="padding:6px 10px"><div class="tbl-w"><table class="num"><thead><tr><th style="text-align:left">Squadra</th><th>Partite</th><th>V%</th><th>Gol</th><th>Periodo</th></tr></thead><tbody>'+
-      c.squadre.map(x=>'<tr><td class="tn" style="text-align:left">'+esc(x[0])+'</td><td>'+x[1]+'</td><td>'+x[2]+'</td><td>'+x[5]+'–'+x[6]+'</td><td class="tiny">'+x[7].slice(0,4)+'–'+x[8].slice(0,4)+'</td></tr>').join("")+'</tbody></table></div></div>',"Numeri dell'allenatore")+
+      c.squadre.map(x=>'<tr><td class="tn" style="text-align:left">'+esc(x[0])+'</td><td>'+x[1]+'</td><td>'+x[2]+'</td><td>'+x[5]+'–'+x[6]+'</td><td class="tiny">'+x[7].slice(0,4)+'–'+x[8].slice(0,4)+'</td></tr>').join("")+'</tbody></table></div></div>',"carriera")+
     '<p class="note">Fonte panchine: Wikipedia (tabelle cambi allenatore, 10 stagioni). Fonte partite: football-data.co.uk. Ogni partita è attribuita all\'allenatore in carica quel giorno; se non è certo chi fosse in panchina, la partita non viene contata.</p>'+
     '<p class="foot">Gioca responsabilmente · 18+</p></div></div>';
   $("bk").onclick=chiudi; }

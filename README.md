@@ -18,6 +18,12 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
 - **Classifiche**: classifica della stagione e "DNA" di ogni campionato.
 - **Allenatori**: ricerca a tastiera e scheda con i numeri di carriera, squadra
   per squadra.
+- **Arbitri**: l'arbitro designato nella scheda partita e una scheda per ogni
+  arbitro (partite dirette, cartellini, rossi, rigori segnati e falli fischiati a
+  partita, contro la media dei campionati che ha arbitrato, stagione per stagione).
+- **Versione gratuita**: 1X2, precedenti e "Probabilità chiave" si vedono; le schede
+  complete mostrano in alto cosa contengono e il tasto "Sblocca tutto", sotto
+  l'anteprima vera con le metriche leggibili e i numeri sfocati.
 - **Simula**: qualsiasi incrocio, anche tra campionati diversi.
 
 ## Da dove vengono i dati
@@ -27,6 +33,8 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
 | Partite con risultati, tiri, angoli, cartellini, falli, xG (10 stagioni, 11 campionati) | football-data.co.uk |
 | Calendari e risultati della stagione, storico delle coppe europee | fixturedownload.com |
 | Allenatori in carica e storico dei cambi panchina | Wikipedia (tabelle "Personnel" e "Managerial changes") |
+| Arbitri: storico 2012-2026, cartellini, rigori (11 campionati + 3 coppe) | transfermarkt-datasets (archivio pubblico) |
+| Arbitri della stagione in corso e designati | football-data.co.uk (Inghilterra, Scozia); football-data.org con chiave gratuita (7 campionati + Champions) |
 
 ## Come ragiona il modello
 
@@ -54,10 +62,23 @@ si sceglie la memoria che sbaglia meno. Risultato: le partite pesano la metà do
 un anno (non tre); il livello di gol delle coppe si stima con memoria di 8 mesi;
 la parte della carriera di un allenatore che si ripete in una squadra nuova è
 misurata sui cambi di panchina reali (circa il 10-20%) e ricalcolata a ogni aggiornamento.
+Livello della stagione in corso (taratura.fattori_stagione): nel 2026/27, dopo il
+Mondiale, nei primi mesi ci sono più gol (2,95 a partita contro 2,65-2,78) e tiri e
+meno cartellini (4,05 contro 4,4-4,8). La memoria di un anno arriva in ritardo, quindi
+si confrontano valori veri e previsti della stagione, prima su tutti i campionati
+insieme e poi per campionato, con pesi scelti sulle 8 stagioni di verifica.
+Arbitro: fattore cartellini = (rapporti "cartellini / media" delle sue partite, memoria
+1 anno, + 10) / (partite + 10), verificato su 41.557 partite. I suoi rigori non
+prevedono quelli futuri: si mostrano ma non entrano nel calcolo.
 Gol: matrice Dixon-Coles esatta. Angoli e cartellini: 10.000 simulazioni
 Monte Carlo correlate al punteggio.
 
 ## Aggiornamento
+
+Facoltativo: la chiave gratuita di football-data.org (registrazione con la sola email)
+va messa nei "secrets" del repository con il nome `FOOTBALL_DATA_KEY`: aggiunge gli
+arbitri designati di Serie A, Liga, Bundesliga, Ligue 1, Eredivisie, Primeira Liga e
+Champions League.
 
 `python build.py` scarica i dati e scrive l'app in `dist/`. Su GitHub il file
 `.github/workflows/aggiorna.yml` lo esegue ogni giorno alle 6:30 e alle 0:30

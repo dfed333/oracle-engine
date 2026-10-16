@@ -21,9 +21,11 @@ from collections import defaultdict
 QUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, QUI)
 
+import arbitri     # noqa: E402
 import engine      # noqa: E402
 import modello     # noqa: E402
 import sorgenti    # noqa: E402
+import taratura    # noqa: E402
 import verifica    # noqa: E402
 
 DIST = os.path.join(QUI, "dist")
@@ -125,6 +127,16 @@ def main():
     log("5/7 calendario e risultati della finestra…")
     finestra = sorgenti.partite_finestra(ab, partite)
     log("    partite in finestra:", len(finestra))
+    log("    arbitri: storico, stagione in corso e designati…")
+    try:
+        AR, designati = arbitri.costruisci(partite, finestra, oggi, log=log)
+    except Exception as e:                     # gli arbitri sono un di più: se la fonte non risponde, l'app esce lo stesso
+        log("    arbitri non disponibili:", type(e).__name__, e)
+        AR, designati = {}, {}
+    for f in finestra:
+        a = designati.get((f["t"][:10], f["c"], f["o"]))
+        if a:
+            f["ar"] = a
 
     eu_all = modello.allenatori_in_coppa(coppe, storico)
 
@@ -134,6 +146,10 @@ def main():
     tiri = modello.profili_tiri(partite)
     extra = modello.medie_lega_extra(partite)
     mv = modello.medie_venue(partite)
+    # livello della stagione in corso (2026/27: più gol e tiri, meno cartellini dopo il Mondiale)
+    FS, fs_comune, fs_n = taratura.fattori_stagione(partite, oggi)
+    log("    livello della stagione in corso rispetto alla memoria di un anno (tutti i campionati):",
+        {k: f"{(v - 1) * 100:+.1f}% su {fs_n.get(k, 0)} partite" for k, v in fs_comune.items()})
 
     log("    verifica sul passato e misura dell'incertezza…")
     VER = verifica.riassunto_verifica(partite, leghe)
@@ -154,13 +170,23 @@ def main():
     L = {}
     for nome, v in leghe.items():
         V = mv.get(nome, {})
+        fs = FS.get(nome) or dict(fs_comune)
+        fg, fc, fk = fs["gol"], fs["cor"], fs["cart"]
+        x = dict(extra.get(nome, {}))
+        if "gol" in x:
+            x["gol"] = round(x["gol"] * fg, 2)
+        if "t" in x:
+            x["t"], x["p"] = round(x["t"] * fs["tiri"], 2), round(x["p"] * fs["tip"], 2)
+        x["ft"], x["fp"] = fs["tiri"], fs["tip"]          # i tiri delle squadre sono medie assolute: il fattore si applica nell'app
         L[nome] = {
-            "gc": r3(v["gol_casa"]), "gt": r3(v["gol_trasferta"]), "cor": round(v["corner"], 2), "cart": round(v["cart"], 2),
-            "vcc": r3(V.get("cor_c", v["corner"] / 2)), "vco": r3(V.get("cor_o", v["corner"] / 2)),
-            "vkc": r3(V.get("cart_c", v["cart"] / 2)), "vko": r3(V.get("cart_o", v["cart"] / 2)),
+            "gc": r3(v["gol_casa"] * fg), "gt": r3(v["gol_trasferta"] * fg),
+            "cor": round(v["corner"] * fc, 2), "cart": round(v["cart"] * fk, 2),
+            "vcc": r3(V.get("cor_c", v["corner"] / 2) * fc), "vco": r3(V.get("cor_o", v["corner"] / 2) * fc),
+            "vkc": r3(V.get("cart_c", v["cart"] / 2) * fk), "vko": r3(V.get("cart_o", v["cart"] / 2) * fk),
+            "fs": fs,
             "rho": v.get("rho_emp", engine.RHO_LEGA.get(nome, engine.RHO_DEFAULT)),
             "p1": v.get("p1"), "px": v.get("px"), "p2": v.get("p2"), "ov": v.get("ov"), "gg": v.get("gg"),
-            "top": v.get("top"), "s": forza.get(nome, 1.0), "x": extra.get(nome, {}),
+            "top": v.get("top"), "s": forza.get(nome, 1.0), "x": x,
         }
     DEF = {k: r3(sum(l[k] for l in L.values()) / len(L)) for k in ("vcc", "vco", "vkc", "vko")}
 
@@ -270,10 +296,10 @@ def main():
             "gen": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "partite": len(partite), "coppe": len(coppe), "pagine_wiki": len(storico.pagine_ok),
             "stagioni": f"20{codici[0][:2]}/{codici[0][2:]} → 20{codici[-1][:2]}/{codici[-1][2:]}",
-            "allenatori": len(C), "squadre": len(Q),
+            "allenatori": len(C), "squadre": len(Q), "arbitri": len(AR), "arb_k": bool(os.environ.get("FOOTBALL_DATA_KEY", "").strip()),
         },
         "L": L, "CUP": CUP, "DEF": DEF, "Q": Q, "C": C, "F": finestra, "H": prec, "FO": FO, "CL": classif,
-        "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S, "CAP": modello.CAP_CAR,
+        "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S, "CAP": modello.CAP_CAR, "AR": AR,
     }
 
     os.makedirs(DIST, exist_ok=True)

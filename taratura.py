@@ -111,3 +111,76 @@ def tara(partite, griglia_sq=(90, 150, 240, 365, 540, 800, 1130), griglia_lega=(
                 risultati[(es, el, g)] = tot / n
     migliore = max(risultati, key=risultati.get)
     return migliore, risultati, per_lega
+
+
+# ------------------------------------------------------------------
+# LIVELLO DELLA STAGIONE IN CORSO
+# ------------------------------------------------------------------
+# Quando un'intera stagione cambia passo (2026/27, dopo il Mondiale: più gol e
+# tiri, meno cartellini) la memoria di un anno arriva in ritardo. Si sommano,
+# dal 1 luglio, i valori veri e quelli previsti (giorno per giorno, come in
+# scorri) di tutte le partite: prima su tutti i campionati insieme, poi del
+# singolo campionato, che parte dal valore comune. Pseudo-conteggi K in
+# "partite equivalenti", scelti sulle 8 stagioni di verifica (log-verosimiglianza):
+#   gol      K tutti 800, campionato ∞    (neutro nelle stagioni normali, toglie parte del ritardo nel 2026/27)
+#   cartell. K tutti 400, campionato 150  (+4,3 millesimi a partita)
+#   angoli   K tutti 400, campionato 300  (+1,4)
+#   tiri     K tutti 200, campionato 35   (+21)
+K_STAGIONE = {"gol": (800, None), "cart": (400, 150), "cor": (400, 300), "tiri": (200, 35), "tip": (200, 35)}
+_STAT_LEGA = {"cart": ("cart_c", "cart_o"), "cor": ("cor_c", "cor_o"), "tiri": ("tiri_c", "tiri_o"), "tip": ("tip_c", "tip_o")}
+
+
+def fattori_stagione(partite, oggi, emivita_sq=365, emivita_lega=365, gamma=0.75, k_base=6.0):
+    """
+    Ritorna ({campionato: {stat: fattore}}, {stat: fattore comune}, {stat: partite della stagione})
+    per la stagione in corso: fattore = quanto la stagione sta andando sopra (>1) o sotto (<1)
+    il livello che il modello si aspetterebbe con la sola memoria di un anno.
+    """
+    xs, xl = LN2 / emivita_sq, LN2 / emivita_lega
+    anno_ora = oggi.year if oggi.month >= 7 else oggi.year - 1
+    media = {"gol": 2.7, "cart": 4.5, "cor": 10.0, "tiri": 24.0, "tip": 8.5}
+    nst = len(_STAT_LEGA)
+    lega = defaultdict(lambda: _Acc(3 + 2 * nst))
+    sq = defaultdict(lambda: _Acc(3))
+    tutti = defaultdict(lambda: [0.0, 0.0, 0])
+    perl = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0]))
+    for m in sorted(partite, key=lambda m: m["data"]):
+        g = m["data"].toordinal(); l = m["lega"]
+        corrente = (m["data"].year if m["data"].month >= 7 else m["data"].year - 1) == anno_ora
+        L = lega[l].leggi(g, xl)
+        if L[0] > 20:
+            Lc, Lt = L[1] / L[0], L[2] / L[0]
+            a = sq[(l, m["casa"])].leggi(g, xs); b = sq[(l, m["ospite"])].leggi(g, xs)
+            ac, dc = ((a[1] + k_base) / (a[0] + k_base), (a[2] + k_base) / (a[0] + k_base)) if a[0] else PRIOR_NUOVA
+            ao, do = ((b[1] + k_base) / (b[0] + k_base), (b[2] + k_base) / (b[0] + k_base)) if b[0] else PRIOR_NUOVA
+            lc, lo = Lc * ac * do, Lt * ao * dc
+            tot_l, t = Lc + Lt, lc + lo
+            previsti = tot_l * (t / tot_l) ** gamma
+            if corrente:
+                for D in (tutti["gol"], perl[l]["gol"]):
+                    D[0] += m["gc"] + m["go"]; D[1] += previsti; D[2] += 1
+            for i, (st, (kc, ko)) in enumerate(_STAT_LEGA.items()):
+                if corrente and m[kc] is not None and m[ko] is not None and L[3 + 2 * i] > 20:
+                    for D in (tutti[st], perl[l][st]):
+                        D[0] += m[kc] + m[ko]; D[1] += L[4 + 2 * i] / L[3 + 2 * i]; D[2] += 1
+            a[0] += 1; a[1] += m["gc"] / Lc; a[2] += m["go"] / Lt
+            b[0] += 1; b[1] += m["go"] / Lt; b[2] += m["gc"] / Lc
+        L[0] += 1; L[1] += m["gc"]; L[2] += m["go"]
+        for i, (kc, ko) in enumerate(_STAT_LEGA.values()):
+            if m[kc] is not None and m[ko] is not None:
+                L[3 + 2 * i] += 1; L[4 + 2 * i] += m[kc] + m[ko]
+    comune = {}
+    for st, (k1, _) in K_STAGIONE.items():
+        T, K1 = tutti[st], k1 * media[st]
+        comune[st] = (T[0] + K1) / (T[1] + K1)
+    fattori = {}
+    for l, per in perl.items():
+        fattori[l] = {}
+        for st, (_, k2) in K_STAGIONE.items():
+            P = per[st]
+            if k2 is None or not P[2]:
+                fattori[l][st] = round(comune[st], 3)
+            else:
+                K2 = k2 * media[st]
+                fattori[l][st] = round((P[0] + K2 * comune[st]) / (P[1] + K2), 3)
+    return fattori, {k: round(v, 3) for k, v in comune.items()}, {k: v[2] for k, v in tutti.items()}

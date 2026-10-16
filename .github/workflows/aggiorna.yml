@@ -41,6 +41,8 @@ jobs:
       - name: Costruisci l'app con i dati di oggi
         env:
           ORACLE_CACHE: cache
+          # chiave gratuita di football-data.org (arbitri designati di 7 campionati + Champions): facoltativa
+          FOOTBALL_DATA_KEY: ${{ secrets.FOOTBALL_DATA_KEY }}
         run: python build.py
 
       - uses: actions/upload-pages-artifact@v3
