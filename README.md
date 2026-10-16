@@ -85,7 +85,7 @@ va messa nei "secrets" del repository con il nome `FOOTBALL_DATA_KEY`: aggiunge 
 arbitri designati di Serie A, Liga, Bundesliga, Ligue 1, Eredivisie, Primeira Liga e
 Champions League.
 
-`python build.py` scarica i dati e scrive l'app in `dist/`. Su GitHub il file
+`python build.py` scarica i dati e scrive l'app in `dist/`; `python controllo.py` (serve Playwright) la apre in un browser vero, con lo schermo di un telefono, e la usa in ogni schermata e in ogni scheda partita: con un solo errore la pubblicazione si ferma (`--tutto` prova tutte le partite). Su GitHub il file
 `.github/workflows/aggiorna.yml` lo esegue ogni giorno alle 6:30 e alle 0:30
 (ora italiana) e pubblica la nuova versione: l'app sul telefono la prende da sola.
 

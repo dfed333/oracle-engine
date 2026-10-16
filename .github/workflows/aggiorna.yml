@@ -45,6 +45,15 @@ jobs:
           FOOTBALL_DATA_KEY: ${{ secrets.FOOTBALL_DATA_KEY }}
         run: python build.py
 
+      # l'app appena costruita viene aperta in un browser vero, come su un telefono, e usata in ogni schermata
+      # e in ogni scheda partita (versione gratuita e completa): se compare un errore, NON si pubblica e
+      # resta online la versione precedente, che funziona
+      - name: Controllo dell'app prima di pubblicarla
+        run: |
+          pip install --quiet playwright==1.52.0
+          python -m playwright install --with-deps chromium
+          python controllo.py
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
