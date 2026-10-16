@@ -73,7 +73,7 @@ def _riassunto_tm():
     giochi = {}
     for r in _gz_righe(g):
         comp = COMP_TM.get(r["competition_id"])
-        arb = (r.get("referee") or "").strip()
+        arb = pulisci(r.get("referee"))
         if not comp or not arb:
             continue
         try:
@@ -110,13 +110,29 @@ PARTICELLE = {"de", "da", "di", "del", "della", "van", "von", "der", "den", "el"
 TITOLI = {"dr", "prof", "sir"}
 
 
+INVISIBILI = dict.fromkeys(map(ord, "\u00ad\u200b\u200c\u200d\u2060\ufeff"), None)   # trattini morbidi e spazi invisibili
+
+
+def pulisci(nome):
+    return " ".join((nome or "").translate(INVISIBILI).split())
+
+
 def _token(nome):
-    return [t for t in norm(nome).split() if t not in TITOLI]
+    return [t for t in norm(pulisci(nome)).split() if t not in TITOLI]
+
+
+# diminutivi dei nomi di battesimo (le fonti inglesi usano spesso "Andy" per "Andrew")
+DIMINUTIVI = [{"andrew", "andy"}, {"robert", "rob", "bob", "robbie"}, {"michael", "mike"}, {"christopher", "chris"},
+              {"thomas", "tom", "tommy"}, {"daniel", "dan", "danny"}, {"matthew", "matt"}, {"nicholas", "nick"},
+              {"anthony", "tony"}, {"james", "jim", "jimmy"}, {"joseph", "joe"}, {"william", "will", "bill"},
+              {"alexander", "alex"}, {"benjamin", "ben"}, {"stephen", "steven", "steve"}, {"david", "dave"},
+              {"peter", "pete"}, {"edward", "ed", "eddie"}, {"samuel", "sam"}, {"jonathan", "jon"},
+              {"giuseppe", "beppe"}, {"francesco", "francesco"}, {"jose", "pepe"}, {"alejandro", "alex"}]
 
 
 def _stesso_nome(a, b):
     """Due nomi di battesimo dello stesso arbitro: "Sam"/"Samuel", "Mohammed"/"Mohammad"."""
-    if a == b:
+    if a == b or any(a in g and b in g for g in DIMINUTIVI):
         return True
     if len(a) >= 3 and len(b) >= 3 and (a.startswith(b) or b.startswith(a)):
         return True
@@ -254,7 +270,7 @@ def _fdorg(chiave, anno, log, diag):
         for m in partite:
             if not m.get("utcDate"):
                 continue
-            arb = next((x.get("name") for x in m.get("referees") or [] if x.get("type") == "REFEREE"), None)
+            arb = pulisci(next((x.get("name") for x in m.get("referees") or [] if x.get("type") == "REFEREE"), None)) or None
             h, a = m.get("homeTeam") or {}, m.get("awayTeam") or {}
             ft = (m.get("score") or {}).get("fullTime") or {}
             out.append({"comp": comp, "d": datetime.date.fromisoformat(m["utcDate"][:10]),
@@ -287,6 +303,8 @@ def costruisci(partite_fd, finestra, oggi, log=print):
     """
     tm = _riassunto_tm()
     log(f"    storico arbitri: {len(tm)} partite (transfermarkt-datasets)")
+    for x in tm:
+        x["a"] = pulisci(x["a"])
     canon = canonici(Counter(x["a"] for x in tm))
     for x in tm:
         x["a"] = canon.get(x["a"], x["a"])
