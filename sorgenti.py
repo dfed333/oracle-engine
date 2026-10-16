@@ -579,6 +579,10 @@ def _t_utc(r):
     return t + ":00Z" if len(t) == 16 else None
 
 
+# controllo delle fonti: risultati del calendario (fixturedownload) contro football-data.co.uk
+CONTROLLO = {"risultati_confrontati": 0, "risultati_diversi": []}
+
+
 def partite_finestra(abbinatore, partite_db, giorni_prima=4, giorni_dopo=12):
     """
     Partite tra giorni_prima giorni fa e giorni_dopo giorni avanti, con il
@@ -619,6 +623,10 @@ def partite_finestra(abbinatore, partite_db, giorni_prima=4, giorni_dopo=12):
         for dd in (d, d - datetime.timedelta(days=1), d + datetime.timedelta(days=1)):
             m = stats.get((dd, casa, osp))
             if m:
+                if gc is not None and go is not None:
+                    CONTROLLO["risultati_confrontati"] += 1
+                    if (int(gc), int(go)) != (m["gc"], m["go"]):
+                        CONTROLLO["risultati_diversi"].append([comp, d.isoformat(), casa, osp, f"{gc}-{go}", f"{m['gc']}-{m['go']}"])
                 f["r"] = [m["gc"], m["go"]]
                 st = {}
                 for k2 in ("tiri", "tip", "cor", "cart", "ros", "fal", "xg"):

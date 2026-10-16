@@ -24,6 +24,7 @@ import gzip
 import io
 import json
 import os
+import time
 import urllib.request
 from collections import Counter, defaultdict
 
@@ -119,6 +120,17 @@ class Nomi:
                         self.chiavi[(lega, cognome, t[0][0])].add(n)
                         self.chiavi[(None, cognome, t[0][0])].add(n)
 
+    def aggiungi(self, nome, lega):
+        n = norm(nome)
+        if not n or n in self.esatti:
+            return
+        self.esatti[n] = nome
+        t = n.split()
+        if len(t) >= 2:
+            for cognome in t[1:]:
+                self.chiavi[(lega, cognome, t[0][0])].add(nome)
+                self.chiavi[(None, cognome, t[0][0])].add(nome)
+
     def trova(self, nome, lega=None):
         if not nome:
             return None
@@ -159,36 +171,56 @@ def _stessa_partita(per_risultato, lega, d, gc, go, casa, osp):
     return max(cand, key=lambda m: _simile(casa, m["casa"]) + _simile(osp, m["ospite"]))
 
 
-def _fdorg(chiave, anno, log):
-    """Partite della stagione da football-data.org (serve la chiave gratuita). [(comp, data, casa, osp, arbitro)]"""
+def _fdorg(chiave, anno, log, diag):
+    """Partite della stagione da football-data.org (serve la chiave gratuita), con arbitro e risultato."""
     out = []
-    for codice, comp in FDORG.items():
+    for i, (codice, comp) in enumerate(FDORG.items()):
+        if i:
+            time.sleep(6.5)            # piano gratuito: 10 richieste al minuto
         url = f"https://api.football-data.org/v4/competitions/{codice}/matches?season={anno}"
         try:
             req = urllib.request.Request(url, headers={"X-Auth-Token": chiave, "User-Agent": sorgenti.UA})
             with urllib.request.urlopen(req, timeout=40) as r:
                 dati = json.loads(r.read().decode("utf-8"))
         except Exception as e:      # chiave sbagliata, limite di richieste, rete: si va avanti senza
-            log(f"    football-data.org {codice}: {type(e).__name__} {getattr(e, 'code', '')}")
+            diag["fonte"][codice] = {"errore": f"{type(e).__name__} {getattr(e, 'code', '')}".strip()}
+            log(f"    football-data.org {codice}: {diag['fonte'][codice]['errore']}")
             continue
+        partite = dati.get("matches", [])
         n = 0
-        for m in dati.get("matches", []):
-            arb = next((x.get("name") for x in m.get("referees") or [] if x.get("type") == "REFEREE"), None)
-            if not arb or not m.get("utcDate"):
+        for m in partite:
+            if not m.get("utcDate"):
                 continue
+            arb = next((x.get("name") for x in m.get("referees") or [] if x.get("type") == "REFEREE"), None)
             h, a = m.get("homeTeam") or {}, m.get("awayTeam") or {}
-            out.append((comp, datetime.date.fromisoformat(m["utcDate"][:10]),
-                        h.get("shortName") or h.get("name") or "", a.get("shortName") or a.get("name") or "", arb))
-            n += 1
-        log(f"    football-data.org {codice}: {n} partite con l'arbitro")
+            ft = (m.get("score") or {}).get("fullTime") or {}
+            out.append({"comp": comp, "d": datetime.date.fromisoformat(m["utcDate"][:10]),
+                        "casa": [h.get("shortName") or "", h.get("name") or ""],
+                        "osp": [a.get("shortName") or "", a.get("name") or ""], "arb": arb,
+                        "finita": m.get("status") == "FINISHED", "gc": ft.get("home"), "go": ft.get("away")})
+            n += bool(arb)
+        diag["fonte"][codice] = {"partite": len(partite), "con_arbitro": n}
+        log(f"    football-data.org {codice}: {len(partite)} partite, {n} con l'arbitro")
     return out
+
+
+def _abbina_nomi(indice, comp, d, casa, osp, soglia=0.7):
+    """Come _abbina_partita, provando sia il nome corto sia quello lungo di football-data.org."""
+    for c in casa:
+        for o in osp:
+            if c and o:
+                x = _abbina_partita(indice, comp, d, c, o, soglia)
+                if x:
+                    return x
+    return None
 
 
 def costruisci(partite_fd, finestra, oggi, log=print):
     """
-    Ritorna (AR, designati):
+    Ritorna (AR, designati, diag):
       AR = {arbitro: profilo} per gli arbitri attivi negli ultimi 3 anni (e quelli designati)
       designati = {(data, casa, ospite): arbitro} per le partite della finestra
+      diag = controllo delle fonti (quante partite, nomi nuovi, conflitti, risultati diversi)
     """
     tm = _riassunto_tm()
     log(f"    storico arbitri: {len(tm)} partite (transfermarkt-datasets)")
@@ -220,6 +252,16 @@ def costruisci(partite_fd, finestra, oggi, log=print):
         righe.append(r)
         ultima_tm[x["l"]] = max(ultima_tm.get(x["l"], d), d)
 
+    # football-data.org (solo con la chiave): prima i nomi completi, così "F Hallam" e "Farai Hallam" sono la stessa scheda
+    diag = {"fonte": {}, "designati": {}, "nomi_nuovi": [], "conflitti": [], "risultati_diversi": [], "non_abbinate": []}
+    chiave = os.environ.get("FOOTBALL_DATA_KEY", "").strip()
+    fdorg = _fdorg(chiave, sorgenti.anno_stagione(oggi), log, diag) if chiave else []
+    for x in fdorg:
+        if x["arb"] and not nomi.trova(x["arb"], x["comp"]):
+            nomi.aggiungi(x["arb"], x["comp"])
+            if x["arb"] not in diag["nomi_nuovi"]:
+                diag["nomi_nuovi"].append(x["arb"])
+
     # 2) stagione in corso dove l'archivio non arriva: football-data.co.uk (Inghilterra, Scozia)
     for m in partite_fd:
         if not m.get("arb") or m["data"] <= ultima_tm.get(m["lega"], datetime.date.min):
@@ -230,23 +272,42 @@ def costruisci(partite_fd, finestra, oggi, log=print):
                       "ros": None if m["ros_c"] is None else m["ros_c"] + m["ros_o"], "rig": None,
                       "fal": None if m["fal_c"] is None else m["fal_c"] + m["fal_o"], "fonte": "fd"})
 
-    # 3) football-data.org (solo con la chiave): arbitri della stagione in corso e designati
-    designati = {}
-    chiave = os.environ.get("FOOTBALL_DATA_KEY", "").strip()
-    fdorg = _fdorg(chiave, sorgenti.anno_stagione(oggi), log) if chiave else []
-    for comp, d, casa, osp, arb in fdorg:
-        nome = nomi.trova(arb, comp) or arb
-        if d < oggi and d > ultima_tm.get(comp, datetime.date.min) and comp in engine.LEGHE_FD.values():
-            g = _abbina_partita(per_giorno, comp, d, casa, osp)
-            if g:
-                p = g[2]
-                righe.append({"a": nome, "l": comp, "d": p["data"], "gol": p["gc"] + p["go"], "casa": p["gc"] > p["go"],
-                              "k": None if p["cart_c"] is None else p["cart_c"] + p["cart_o"],
-                              "ros": None if p["ros_c"] is None else p["ros_c"] + p["ros_o"], "rig": None,
-                              "fal": None if p["fal_c"] is None else p["fal_c"] + p["fal_o"], "fonte": "fd"})
-        f = _abbina_partita(per_fin, comp, d, casa, osp)
-        if f:
-            designati[(f[2], f[0], f[1])] = nome
+    # 3) football-data.org: arbitri delle partite giocate (stagione in corso) e designati della finestra.
+    #    Ogni designazione è registrata con la sua fonte: se due fonti dicono arbitri diversi, si vede nel controllo.
+    designati, fonte_des = {}, {}
+
+    def designa(chiave_f, nome, fonte):
+        prima = designati.get(chiave_f)
+        if prima and prima != nome:
+            diag["conflitti"].append([chiave_f[0], chiave_f[1], chiave_f[2], prima, fonte_des[chiave_f], nome, fonte])
+        designati[chiave_f], fonte_des[chiave_f] = nome, fonte
+
+    da_fin = oggi - datetime.timedelta(days=4)
+    a_fin = oggi + datetime.timedelta(days=12)
+    comp_fin = {f["comp"] for f in finestra}
+    controllate = 0
+    for x in fdorg:
+        comp, d = x["comp"], x["d"]
+        nome = nomi.trova(x["arb"], comp) or x["arb"] if x["arb"] else None
+        g = _abbina_nomi(per_giorno, comp, d, x["casa"], x["osp"]) if comp in engine.LEGHE_FD.values() else None
+        if g and x["finita"] and x["gc"] is not None:
+            controllate += 1
+            if (g[2]["gc"], g[2]["go"]) != (x["gc"], x["go"]) and len(diag["risultati_diversi"]) < 30:
+                diag["risultati_diversi"].append([comp, d.isoformat(), g[0], g[1], f"{g[2]['gc']}-{g[2]['go']}", f"{x['gc']}-{x['go']}"])
+        # partita giocata dopo la fine dell'archivio e non già contata da football-data.co.uk (Inghilterra)
+        if nome and g and d < oggi and d > ultima_tm.get(comp, datetime.date.min) and not g[2].get("arb"):
+            p = g[2]
+            righe.append({"a": nome, "l": comp, "d": p["data"], "gol": p["gc"] + p["go"], "casa": p["gc"] > p["go"],
+                          "k": None if p["cart_c"] is None else p["cart_c"] + p["cart_o"],
+                          "ros": None if p["ros_c"] is None else p["ros_c"] + p["ros_o"], "rig": None,
+                          "fal": None if p["fal_c"] is None else p["fal_c"] + p["fal_o"], "fonte": "fd"})
+        if da_fin <= d <= a_fin and comp in comp_fin:
+            f = _abbina_nomi(per_fin, comp, d, x["casa"], x["osp"])
+            if f and nome:
+                designa((f[2], f[0], f[1]), nome, "football-data.org")
+            elif not f and len(diag["non_abbinate"]) < 30:
+                diag["non_abbinate"].append([comp, d.isoformat(), x["casa"][0] or x["casa"][1], x["osp"][0] or x["osp"][1]])
+    diag["risultati_controllati"] = controllate
 
     # designati dal calendario di football-data.co.uk (colonna Referee) e dalle partite già giocate
     fx = sorgenti.scarica("https://football-data.co.uk/fixtures.csv", sorgenti._cartella("calendari", "fixtures.csv"), max_ore=3)
@@ -260,12 +321,12 @@ def costruisci(partite_fd, finestra, oggi, log=print):
                 osp = engine.FD_RENAME.get(r["AwayTeam"].strip(), r["AwayTeam"].strip())
                 f = _abbina_partita(per_fin, lega, d, casa, osp, soglia=1.6)
                 if f:
-                    designati[(f[2], f[0], f[1])] = nomi.trova(arb, lega) or arb
+                    designa((f[2], f[0], f[1]), nomi.trova(arb, lega) or arb, "football-data.co.uk calendario")
     for m in partite_fd:
         if m.get("arb") and m["data"] >= oggi - datetime.timedelta(days=7):
             f = _abbina_partita(per_fin, m["lega"], m["data"], m["casa"], m["ospite"], soglia=1.6)
             if f:
-                designati[(f[2], f[0], f[1])] = nomi.trova(m["arb"], m["lega"]) or m["arb"]
+                designa((f[2], f[0], f[1]), nomi.trova(m["arb"], m["lega"]) or m["arb"], "football-data.co.uk risultati")
 
     # medie per campionato e stagione, separate per fonte (le fonti contano i cartellini in modo un po' diverso)
     medie = defaultdict(lambda: defaultdict(lambda: [0.0, 0]))
@@ -336,4 +397,16 @@ def costruisci(partite_fd, finestra, oggi, log=print):
     log(f"    arbitri con scheda: {len(AR)} · designati nella finestra: "
         f"{sum(1 for f in finestra if (f['t'][:10], f['c'], f['o']) in designati)} su {len(finestra)}"
         + ("" if chiave else " (senza chiave football-data.org: solo Inghilterra e Scozia)"))
-    return AR, designati
+    # controllo: designati per competizione e per fonte, e quanti hanno la scheda nello storico
+    for f in finestra:
+        k = (f["t"][:10], f["c"], f["o"])
+        c = diag["designati"].setdefault(f["comp"], {"partite": 0, "con_arbitro": 0, "con_scheda": 0})
+        c["partite"] += 1
+        if k in designati:
+            c["con_arbitro"] += 1
+            c["con_scheda"] += designati[k] in AR
+    diag["fonti_designati"] = dict(Counter(fonte_des.values()))
+    diag["chiave"] = bool(chiave)
+    if diag["conflitti"] or diag["risultati_diversi"]:
+        log(f"    ATTENZIONE fonti in disaccordo: {len(diag['conflitti'])} arbitri, {len(diag['risultati_diversi'])} risultati")
+    return AR, designati, diag

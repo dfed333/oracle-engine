@@ -129,10 +129,10 @@ def main():
     log("    partite in finestra:", len(finestra))
     log("    arbitri: storico, stagione in corso e designati…")
     try:
-        AR, designati = arbitri.costruisci(partite, finestra, oggi, log=log)
+        AR, designati, diag_arb = arbitri.costruisci(partite, finestra, oggi, log=log)
     except Exception as e:                     # gli arbitri sono un di più: se la fonte non risponde, l'app esce lo stesso
         log("    arbitri non disponibili:", type(e).__name__, e)
-        AR, designati = {}, {}
+        AR, designati, diag_arb = {}, {}, {"errore": f"{type(e).__name__}: {e}"}
     for f in finestra:
         a = designati.get((f["t"][:10], f["c"], f["o"]))
         if a:
@@ -297,6 +297,8 @@ def main():
             "partite": len(partite), "coppe": len(coppe), "pagine_wiki": len(storico.pagine_ok),
             "stagioni": f"20{codici[0][:2]}/{codici[0][2:]} → 20{codici[-1][:2]}/{codici[-1][2:]}",
             "allenatori": len(C), "squadre": len(Q), "arbitri": len(AR), "arb_k": bool(os.environ.get("FOOTBALL_DATA_KEY", "").strip()),
+            # controllo delle fonti (pubblico, nessun dato riservato): serve a verificare che dicano la stessa cosa
+            "controllo": {"arbitri": diag_arb, "calendario": sorgenti.CONTROLLO},
         },
         "L": L, "CUP": CUP, "DEF": DEF, "Q": Q, "C": C, "F": finestra, "H": prec, "FO": FO, "CL": classif,
         "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S, "CAP": modello.CAP_CAR, "AR": AR,

@@ -470,10 +470,14 @@ function calcola(f, opt){
   const grezzi={lamC,lamO,totL};
   [lamC,lamO]=smorza(lamC,lamO,totL);
   lamC=clamp(lamC,.12,4.6); lamO=clamp(lamO,.12,4.6);
-  const P=matrice(lamC,lamO,rho);
-  let p1=0,px=0,p2=0,gg=0; const ov={}, celle=[];
+  // UN SOLO CERVELLO: la matrice dei risultati viene allineata alle probabilità verificate sul passato
+  // (Over 2.5 e Gol/Gol), tenendo fermo l'1X2 che è già preciso. Da questa matrice escono TUTTI i numeri
+  // sui gol (risultati esatti, linee Over/Under, fasce, multigol, gol attesi) e le simulazioni di angoli e cartellini.
+  const P0=matrice(lamC,lamO,rho), o25raw=probMercato(P0,"O25"), ggraw=probMercato(P0,"GG");
+  const P=allinea(P0,calib("O25",o25raw),calib("GG",ggraw));
+  let p1=0,px=0,p2=0,gg=0,mC=0,mO=0; const ov={}, celle=[];
   for(let i=0;i<11;i++) for(let j=0;j<11;j++){ const v=P[i][j]; if(i>j)p1+=v; else if(i===j)px+=v; else p2+=v;
-    if(i>0&&j>0) gg+=v; celle.push([i,j,v]); for(const L of [.5,1.5,2.5,3.5,4.5]) if(i+j>L) ov[L]=(ov[L]||0)+v; }
+    if(i>0&&j>0) gg+=v; mC+=i*v; mO+=j*v; celle.push([i,j,v]); for(const L of [.5,1.5,2.5,3.5,4.5]) if(i+j>L) ov[L]=(ov[L]||0)+v; }
   celle.sort((a,b)=>b[2]-a[2]);
   // angoli e cartellini: medie di lega casa/trasferta
   const Vs=[Lc,Lo].filter(Boolean); const vm=k=>Vs.length?Vs.reduce((a,L)=>a+L[k],0)/Vs.length:D.DEF[k];
@@ -491,10 +495,23 @@ function calcola(f, opt){
     const ft=((Lc.x.ft||1)+(Lo.x.ft||1))/2, fp=((Lc.x.fp||1)+(Lo.x.fp||1))/2;   // livello della stagione in corso
     tiri={c:tc.t*to.ts/mt*ft, o:to.t*tc.ts/mt*ft, pc:tc.p*to.ps/mp*fp, po:to.p*tc.ps/mp*fp}; }
   const stimati = !!(qc.solo||qo.solo||qc.cs||qo.cs);
-  const r={ok:true,mc:false,key,f,lamC,lamO,rho,P,p1,px,p2,gg,ov,celle,base,at,st_c,st_o,all_c,all_o,pc,po,
+  const r={ok:true,mc:false,key,f,lamC:mC,lamO:mO,lamRaw:[lamC,lamO],o25raw,ggraw,rho,P,p1,px,p2,gg,ov,celle,base,at,st_c,st_o,all_c,all_o,pc,po,
     muCC,muCO,muKC,muKO,der,h2h,tiri,stimati,opt,grezzi,arb:arb?{nome:f.ar,f:fArb}:null};
-  r.o25=calib("O25",ov[2.5]); r.ggc=calib("GG",gg);
+  r.o25=ov[2.5]; r.ggc=gg;       // già allineate: sono le stesse della matrice
   CACHE.set(key,r); return r; }
+
+/* allineamento della matrice (raking): si ritoccano a turno le celle perché 1X2, Over 2.5 e Gol/Gol
+   tornino uguali ai valori voluti; in poche passate tutti e tre coincidono */
+function allinea(P0,tO,tG){
+  const P=P0.map(x=>x.slice()), gr=[(i,j)=>i>j?0:(i===j?1:2),(i,j)=>i+j>2?1:0,(i,j)=>i&&j?1:0];
+  const t1=[0,0,0]; for(let i=0;i<11;i++) for(let j=0;j<11;j++) t1[gr[0](i,j)]+=P0[i][j];
+  const tot=t1[0]+t1[1]+t1[2], tg=[t1,[tot*(1-tO),tot*tO],[tot*(1-tG),tot*tG]];
+  for(let it=0;it<40;it++){ let err=0;
+    for(let g=0;g<3;g++){ const sm=[0,0,0]; for(let i=0;i<11;i++) for(let j=0;j<11;j++) sm[gr[g](i,j)]+=P[i][j];
+      const fc=sm.map((v,k)=>v>1e-12?tg[g][k]/v:1); for(const x of fc) err=Math.max(err,Math.abs(x-1));
+      for(let i=0;i<11;i++) for(let j=0;j<11;j++) P[i][j]*=fc[gr[g](i,j)]; }
+    if(err<1e-7) break; }
+  return P; }
 
 /* smorzamento: totale gol riportato verso la media della competizione, rapporto tra le squadre invariato */
 function smorza(lc,lo,totL){ const g=D.V?D.V.gamma:1, t=lc+lo; if(!(t>0)||!(totL>0)) return [lc,lo]; const n=totL*Math.pow(t/totL,g); return [lc*n/t,lo*n/t]; }
@@ -510,8 +527,8 @@ function probMercato(P,k){ let v=0; for(let i=0;i<11;i++) for(let j=0;j<11;j++){
 function principale(r){
   const c=r.f.c, o=r.f.o, m=[
     ["1","Vince "+c,r.p1,r.p1],["X","Pareggio",r.px,r.px],["2","Vince "+o,r.p2,r.p2],
-    ["O25","Over 2.5 gol",r.o25,r.ov[2.5]],["U25","Under 2.5 gol",1-r.o25,1-r.ov[2.5]],
-    ["GG","Gol/Gol (segnano entrambe)",r.ggc,r.gg],["NG","No Gol (almeno una non segna)",1-r.ggc,1-r.gg]];
+    ["O25","Over 2.5 gol",r.o25,r.o25raw],["U25","Under 2.5 gol",1-r.o25,1-r.o25raw],
+    ["GG","Gol/Gol (segnano entrambe)",r.ggc,r.ggraw],["NG","No Gol (almeno una non segna)",1-r.ggc,1-r.ggraw]];
   m.sort((a,b)=>b[2]-a[2]); const x=m[0]; return {key:x[0],lab:x[1],p:x[2],praw:x[3]}; }
 
 /* AFFIDABILITÀ: probabilità dell'uscita principale meno il margine d'incertezza di QUESTA partita.
@@ -569,12 +586,11 @@ function precedenti(a,b){ return D.H[[a,b].sort().join("|")]||[]; }
 
 function lineaMed(L){ let best=L[0]; for(const x of L) if(Math.abs(x[1]-.5)<Math.abs(best[1]-.5)) best=x; return best; }
 function uscite(r){
+  // stessi mercati e stesso ordine dell'uscita principale (affidabilità e stellina): la prima coincide sempre.
+  // Angoli e cartellini hanno le loro linee nelle schede dedicate.
   const c=r.f.c, o=r.f.o, out=[
     ["1 · vince "+c,r.p1,"esito"],["X · pareggio",r.px,"esito"],["2 · vince "+o,r.p2,"esito"],
     ["Over 2.5 gol",r.o25,"gol"],["Under 2.5 gol",1-r.o25,"gol"],["Gol/Gol",r.ggc,"gol"],["No Gol",1-r.ggc,"gol"]];
-  if(!r.stimati){ const lc=lineaMed(r.corL), lk=lineaMed(r.karL);
-    out.push([(lc[1]>=.5?"Over ":"Under ")+lc[0]+" angoli",Math.max(lc[1],1-lc[1]),"angoli"]);
-    out.push([(lk[1]>=.5?"Over ":"Under ")+lk[0]+" cartellini",Math.max(lk[1],1-lk[1]),"cartellini"]); }
   return out.sort((a,b)=>b[1]-a[1]); }
 
 /* ---------------- date ---------------- */
@@ -930,7 +946,7 @@ function disegnaTab(f,opt){
   } else if(TAB==="gol"){
     let h='<div class="sec">Risultati esatti più probabili</div><div class="scores">'+r.celle.slice(0,9).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>'+notaEsatti()+'<div class="card" style="margin-top:8px">'+barreFasce(r)+'</div>';
     h+='<div class="sec">Over / Under</div><div class="card"><div class="tbl-w"><table class="num"><thead><tr><th>Linea</th><th>Over</th><th>Under</th></tr></thead><tbody>'+
-      [.5,1.5,2.5,3.5,4.5].map(L=>{ const o=L===2.5?r.o25:r.ov[L]; return '<tr'+(L===2.5?' class="hl"':"")+'><td>'+L+'</td><td>'+pct(o,1)+'</td><td>'+pct(1-o,1)+'</td></tr>'; }).join("")+'</tbody></table></div></div>';
+      [.5,1.5,2.5,3.5,4.5].map(L=>{ const o=r.ov[L]; return '<tr'+(L===2.5?' class="hl"':"")+'><td>'+L+'</td><td>'+pct(o,1)+'</td><td>'+pct(1-o,1)+'</td></tr>'; }).join("")+'</tbody></table></div></div>';
     h+='<div class="sec">Gol per squadra</div><div class="kgrid">'+kp(esc(f.c),r.lamC,null,v=>v.toFixed(2))+kp(esc(f.o),r.lamO,null,v=>v.toFixed(2))+kp("Gol/Gol",r.ggc*100,b.gg,v=>v.toFixed(0)+"%")+kp("No Gol",(1-r.ggc)*100,b.gg!=null?100-b.gg:null,v=>v.toFixed(0)+"%")+'</div>';
     const xg=[[f.c,D.Q[f.c].t],[f.o,D.Q[f.o].t]].filter(x=>x[1]&&x[1].x!=null);
     if(xg.length) h+='<div class="sec">Expected goals stagione</div><div class="card">'+xg.map(([t,v])=>'<div class="row small" style="padding:4px 0"><span class="grow">'+esc(t)+'</span><span class="num">xG <b>'+v.x+'</b> fatti · <b>'+v.xs+'</b> concessi <span class="muted">('+v.nx+' partite)</span></span></div>').join("")+'<p class="note">Gli xG della stagione entrano nel calcolo: per le partite in cui la fonte li pubblica, il modello usa metà gol reali e metà xG, così un periodo fortunato o sfortunato pesa meno.</p></div>';
