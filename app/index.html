@@ -848,7 +848,7 @@ function schermoTop(){
       :'<div class="sig"><span>'+(a.liv==="alta"?"★ ":"")+'<b>••••••••••</b></span><span class="v">'+LUCC+'</span></div>')+'</button>'; };
   $("top-list").innerHTML = (ACC.premium?"":'<div style="margin-bottom:12px">'+vetrina("guarda")+'</div>')+
     (t.alte.length ? t.alte.map(scheda).join("")
-    : '<div class="empty"><b>Nessuna partita con la stellina</b>In questo giorno nessuna uscita resta al 65% anche nell'ipotesi più prudente sui dati. Meglio nessun consiglio che uno debole.</div>')+
+    : '<div class="empty"><b>Nessuna partita con la stellina</b>In questo giorno nessuna uscita resta al 65% anche nell\'ipotesi più prudente sui dati. Meglio nessun consiglio che uno debole.</div>')+
     (t.medie.length?'<div class="sec">Da tenere d\'occhio</div>'+t.medie.slice(0,6).map(scheda).join(""):"");
   $("top-list").querySelectorAll(".match").forEach(b=>b.addEventListener("click",()=>vai("#m/"+b.dataset.i)));
   const RK=[["gol","Più gol"],["pochi","Meno gol"],["angoli","Più angoli"],["cart","Più cartellini"],["tiri","Più tiri"]];
