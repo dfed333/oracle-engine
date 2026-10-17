@@ -14,6 +14,11 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
   (solidi = la partita ha le quote o le squadre hanno molte partite nel campionato; medi =
   coppa europea o squadra con poche partite; scarsi = squadra vista solo in coppa).
   Stellina "Da guardare" dal 65% con dati non scarsi.
+- **Chiedi su questa partita** (nel Pronostico, versione completa): domande in parole semplici
+  («l'Inter fa più di 2 gol?», «finisce 1-2?», «vince X e over 2.5?», «più di 9 angoli?»,
+  «perché questi risultati?»). Le risposte escono dagli stessi numeri del pronostico (matrice
+  dei risultati, simulazioni di angoli e cartellini), più forma, precedenti e impegni di coppa
+  vicini: nessun modello linguistico esterno, funziona anche offline.
 - **Com'è andata**: sulle partite giocate il pronostico fatto prima della partita con ✓ o ✗,
   e il riepilogo del giorno (quante volte è uscito contro quante ce lo aspettavamo).
 - **Da guardare**: le partite con la stellina e il motivo, più la classifica delle
@@ -83,6 +88,19 @@ nel calcolo dei gol (il mercato li conosce già): si mostrano i loro numeri veri
 carriera che comprende anche Serie B, Championship e 2. Bundesliga (lette solo per lo
 storico, le loro partite non compaiono nell'app). Angoli e cartellini: profili di squadra,
 allenatore, stile, derby e arbitro, 10.000 simulazioni correlate al punteggio.
+
+**Risultati esatti**: dopo l'allineamento, correzione per tipo di risultato visto dalla
+favorita (gol favorita 0..4+ × gol sfavorita 0..2+, `verifica.fattori_esatti`): con la favorita
+al 65%+ l'1-0 esce l'11,3% contro il 10,2% previsto, il 4-1 il 4,0% contro il 4,7%. Provata
+"come se fosse quel giorno": logloss del risultato esatto 2,8527 → 2,8516 su 34.599 partite.
+Le vittorie larghe NON sono sottostimate (favorita con 4+ gol: 22,9% previsto, 21,4% vero).
+
+**Dati recenti**: dare più peso agli anni recenti nella correzione delle quote non cambia nulla
+(le quote sono già fatte con giocatori e allenatori di oggi). Cartellini della stagione in corso
+(`taratura.fattori_stagione`): di solito l'inizio stagione ha più cartellini del resto; il
+rapporto di oggi si confronta con le stagioni passate allo stesso giorno e la parte che resta
+(pendenza misurata) va sul resto della stagione. Verificato sulle stagioni complete a metà
+ottobre: errore 0,048 contro 0,051 del fattore precedente.
 
 **Combinazioni**: per ogni partita la scelta più probabile sotto un tetto (80/75/70/65%),
 senza le giocate quasi scontate (Over 0.5, Under 4.5, Multigol 1-5, 1-6, 2-6); verificate

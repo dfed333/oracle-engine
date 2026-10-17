@@ -182,7 +182,7 @@ def main():
     log("    verifica del motore dell'app (attese del mercato) e Confronto…")
     squadre_ora = {t: ultima[t][1] for t in ultima if ultima[t][0] >= oggi - datetime.timedelta(days=200)}
     VQ, PV = verifica.verifica_mercato(partite, leghe, mostrate, squadre_ora)
-    VV = {"gamma": VER["gamma"], "curve": VER["curve"], "q": VQ["q"], "r": VQ["r"], "stagioni": VQ["stagioni"], "n": VQ["q"]["n"],
+    VV = {"gamma": VER["gamma"], "curve": VER["curve"], "q": VQ["q"], "r": VQ["r"], "fe": VQ["fe"], "stagioni": VQ["stagioni"], "n": VQ["q"]["n"],
          "vecchio": {"n": VER["n"], "acc1x2": VER["acc1x2"]}}
     log(f"    con le quote: {VQ['q']['n']} partite · favorito {VQ['q']['acc1x2']:.1%} · Over/Under {VQ['q']['ou']:.1%} · "
         f"Gol/No Gol {VQ['q']['gg']:.1%} · esatto {VQ['q']['esatto1']:.1%} (primi 3: {VQ['q']['esatto3']:.1%})")

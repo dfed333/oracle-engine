@@ -333,15 +333,18 @@ def probabilita_mercati(P):
 def numeri_campionati(partite, oggi):
     """
     Gol, Over, Gol/Gol, 0-0, vittorie in casa e i risultati esatti più frequenti di ogni campionato
-    su tre periodi: ultimi 10 anni (tutto l'archivio), ultimi 3 anni, ultimo anno (365 giorni).
+    su quattro periodi: ultimi 10 anni (tutto l'archivio), ultimi 3 anni, ultimo anno (365 giorni), stagione in corso.
     """
-    periodi = {"10": None, "3": oggi - datetime.timedelta(days=3 * 365), "1": oggi - datetime.timedelta(days=365)}
+    periodi = {"10": None, "3": oggi - datetime.timedelta(days=3 * 365), "1": oggi - datetime.timedelta(days=365), "s": None}
+    stagione = max(m["stagione"] for m in partite)        # "s" = stagione in corso
     acc = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
     ris = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
     for m in partite:
         t = m["gc"] + m["go"]
         for per, da in periodi.items():
             if da and m["data"] < da:
+                continue
+            if per == "s" and m["stagione"] != stagione:
                 continue
             a = acc[m["lega"]][per]
             a["n"] += 1; a["gol"] += t; a["o15"] += t > 1; a["o25"] += t > 2; a["o35"] += t > 3
@@ -439,10 +442,51 @@ def _curve(righe):
             "GG": _curva([(r[4], r[5] > 0 and r[6] > 0) for r in righe])}
 
 
-def finali(P0, grezze, curve):
-    """Matrice finale: la stessa operazione dell'app (1X2 corretto e riportato a 100, Over 2.5 e Gol/Gol corretti)."""
+def classe_esatto(i, j, fav):
+    """Tipo di risultato visto dalla favorita: gol della favorita (0..4+) × gol della sfavorita (0..2+) → 0..14."""
+    a, b = (i, j) if fav == 0 else (j, i)
+    return min(a, 4) * 3 + min(b, 2)
+
+
+def finali(P0, grezze, curve, fe=None):
+    """
+    Matrice finale: la stessa operazione dell'app (1X2 corretto e riportato a 100, Over 2.5 e Gol/Gol corretti);
+    con fe, correzione dei risultati esatti per tipo di risultato e nuovo allineamento agli stessi valori.
+    """
     q1, qx, q2 = p1x2(curve, {"1": grezze[0], "X": grezze[1], "2": grezze[2]})
-    return allinea(P0, (q1, qx, q2), calib(curve.get("O25"), grezze[3]), calib(curve.get("GG"), grezze[4]))
+    tO, tG = calib(curve.get("O25"), grezze[3]), calib(curve.get("GG"), grezze[4])
+    P = allinea(P0, (q1, qx, q2), tO, tG)
+    if fe:
+        fav = 0 if q1 >= q2 else 1
+        Q = [[P[i][j] * fe[classe_esatto(i, j, fav)] for j in range(11)] for i in range(11)]
+        t = sum(map(sum, Q))
+        P = allinea([[x / t for x in r] for r in Q], (q1, qx, q2), tO, tG)
+    return P
+
+
+def fattori_esatti(partite, leghe, curve, k=50.0):
+    """
+    Risultati esatti: quante volte esce davvero ogni tipo di risultato (visto dalla favorita) rispetto al previsto.
+    Su 8.108 partite con favorita al 65%+: 1-0 previsto 10,2% uscito 11,3%, 2-1 9,8% → 10,8%, 1-1 7,9% → 6,9%,
+    4-1 4,7% → 4,0%. Provata "come se fosse quel giorno" (fattori dalle sole stagioni precedenti): logloss
+    del risultato esatto 2,8527 → 2,8516 su 34.599 partite.
+    """
+    from mercato import matrice as mat, rho_di
+    prev, oss = [0.0] * 15, [0.0] * 15
+    for m in partite:
+        if not m.get("lk"):
+            continue
+        rho = rho_di(leghe, m["lega"])
+        P0 = mat(m["lk"][0], m["lk"][1], rho)
+        P = finali(P0, (m["q"][0], m["q"][1], m["q"][2], m["q"][3], probabilita(P0)["GG"]), curve)
+        p1 = sum(P[i][j] for i in range(11) for j in range(i))
+        p2 = sum(P[i][j] for i in range(11) for j in range(i + 1, 11))
+        fav = 0 if p1 >= p2 else 1
+        for i in range(11):
+            for j in range(11):
+                prev[classe_esatto(i, j, fav)] += P[i][j]
+        oss[classe_esatto(m["gc"], m["go"], fav)] += 1
+    return [round(min(max((o + k) / (p + k), 0.8), 1.25), 4) for o, p in zip(oss, prev)]
 
 
 def verifica_mercato(partite, leghe, mostrate, squadre_ora, stagioni_squadre=3, minimo_sq=30):
@@ -491,6 +535,8 @@ def verifica_mercato(partite, leghe, mostrate, squadre_ora, stagioni_squadre=3, 
         return {"n": n, "acc1x2": round(fav / n, 4), "ou": round(ou / n, 4), "gg": round(ggh / n, 4), "curve": curve, "tab": tab}
 
     V = {"q": riassunto(rq, cq), "r": riassunto(rr, cr)}
+    fe = fattori_esatti(partite, leghe, cq)
+    V["fe"] = fe
 
     # ---- passata finale con le matrici dell'app (fonte q): risultati esatti + Confronto ----
     codici = sorted({m["stagione"] for m in partite if m.get("lk")})
@@ -509,7 +555,7 @@ def verifica_mercato(partite, leghe, mostrate, squadre_ora, stagioni_squadre=3, 
         rho = rho_di(leghe, m["lega"])
         P0 = mat(m["lk"][0], m["lk"][1], rho)
         gg0 = probabilita(P0)["GG"]
-        P = finali(P0, (m["q"][0], m["q"][1], m["q"][2], m["q"][3], gg0), cq)
+        P = finali(P0, (m["q"][0], m["q"][1], m["q"][2], m["q"][3], gg0), cq, fe)
         gc, go = m["gc"], m["go"]
         celle = sorted(((P[i][j], i, j) for i in range(11) for j in range(11)), reverse=True)
         n_tot += 1

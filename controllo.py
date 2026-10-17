@@ -101,6 +101,13 @@ def browser(tutto=False):
               if (f.q && r.fonte !== 'q') male.push(nome + ': ha le attese del mercato ma non le usa');
               if (!['solidi', 'medi', 'scarsi'].includes(r.dati.t)) male.push(nome + ': dati = ' + r.dati.t);
               if (a.liv === 'alta' && (a.val < 0.65 || r.dati.t === 'scarsi')) male.push(nome + ': stellina senza i requisiti');
+              // la chat: ogni domanda tipo deve avere una risposta pulita, con gli stessi numeri del pronostico
+              for (const d of [f.o + ' fa più di 2 gol?', 'Finisce 1-1?', 'Vince ' + f.c + ' e over 2.5', 'Segnano entrambe?',
+                               'Più di 9 angoli?', 'più di 4 cartellini', 'Perché questi risultati?', 'quanti gol fa ' + f.c + '?']) {
+                const t = rispondi(r, d).join(' ');
+                if (!t || /NaN|undefined|\\bnull\\b|Infinity/.test(t) || /non ho capito/i.test(t)) male.push(nome + ': chat «' + d + '» → ' + t.slice(0, 120));
+              }
+              if (Math.abs(probCella(r, (i, j) => i > j) - r.p1) > 1e-9) male.push(nome + ': chat e pronostico non coincidono');
             }
             return male.slice(0, 20); }""")
         errori += [f"numeri: {x}" for x in numeri]
@@ -125,7 +132,7 @@ def browser(tutto=False):
                 "STATO.comb.vista='es'; schermoComb(); STATO.comb.giorno='3g'; schermoComb();",
                 "STATO.comb.vista='co'; for (const c of [80,75,70,65]) for (const f of ['tutti','esito','ou','gg','mg']) { STATO.comb.cap=c; STATO.comb.fam=f; schermoComb(); }",
                 "location.hash='#leghe'; router(); STATO.legheVista='conf'; vistaLeghe();",
-                "for (const s of [55,60,65,70]) { STATO.soglia=s; schermoConfronto(); } for (const p of ['10','3','1']) { STATO.per=p; schermoConfronto(); }",
+                "for (const s of [55,60,65,70]) { STATO.soglia=s; schermoConfronto(); } for (const p of ['10','3','1','s']) { STATO.per=p; schermoConfronto(); }",
                 "STATO.legheVista='cl'; vistaLeghe();",
                 "location.hash='#all'; router(); STATO.vista='arb'; vistaAllenatori(); STATO.vista='all'; vistaAllenatori();",
                 "location.hash='#pref'; router(); D.F.slice(0,3).forEach(f => PREF.add(chiaveP(f))); schermoPreferite();",

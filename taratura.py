@@ -14,6 +14,7 @@ al punteggio che è uscito davvero).
   gamma           : smorzamento del totale gol verso la media di lega
 """
 
+import datetime
 import math
 from collections import defaultdict
 
@@ -138,6 +139,9 @@ def fattori_stagione(partite, oggi, emivita_sq=365, emivita_lega=365, gamma=0.75
     """
     xs, xl = LN2 / emivita_sq, LN2 / emivita_lega
     anno_ora = oggi.year if oggi.month >= 7 else oggi.year - 1
+    giorno_stagione = (oggi - datetime.date(anno_ora, 7, 1)).days
+    # cartellini di ogni stagione passata, rispetto alla memoria: prima e dopo lo stesso giorno della stagione di oggi
+    storico_cart = defaultdict(lambda: [0.0, 0.0, 0, 0.0, 0.0, 0])
     media = {"gol": 2.7, "cart": 4.5, "cor": 10.0, "tiri": 24.0, "tip": 8.5}
     nst = len(_STAT_LEGA)
     lega = defaultdict(lambda: _Acc(3 + 2 * nst))
@@ -146,7 +150,8 @@ def fattori_stagione(partite, oggi, emivita_sq=365, emivita_lega=365, gamma=0.75
     perl = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0]))
     for m in sorted(partite, key=lambda m: m["data"]):
         g = m["data"].toordinal(); l = m["lega"]
-        corrente = (m["data"].year if m["data"].month >= 7 else m["data"].year - 1) == anno_ora
+        anno_m = m["data"].year if m["data"].month >= 7 else m["data"].year - 1
+        corrente = anno_m == anno_ora
         L = lega[l].leggi(g, xl)
         if L[0] > 20:
             Lc, Lt = L[1] / L[0], L[2] / L[0]
@@ -160,6 +165,9 @@ def fattori_stagione(partite, oggi, emivita_sq=365, emivita_lega=365, gamma=0.75
                 for D in (tutti["gol"], perl[l]["gol"]):
                     D[0] += m["gc"] + m["go"]; D[1] += previsti; D[2] += 1
             for i, (st, (kc, ko)) in enumerate(_STAT_LEGA.items()):
+                if st == "cart" and not corrente and m[kc] is not None and m[ko] is not None and L[3 + 2 * i] > 20:
+                    h = storico_cart[anno_m]; o = 0 if (m["data"] - datetime.date(anno_m, 7, 1)).days < giorno_stagione else 3
+                    h[o] += m[kc] + m[ko]; h[o + 1] += L[4 + 2 * i] / L[3 + 2 * i]; h[o + 2] += 1
                 if corrente and m[kc] is not None and m[ko] is not None and L[3 + 2 * i] > 20:
                     for D in (tutti[st], perl[l][st]):
                         D[0] += m[kc] + m[ko]; D[1] += L[4 + 2 * i] / L[3 + 2 * i]; D[2] += 1
@@ -173,6 +181,24 @@ def fattori_stagione(partite, oggi, emivita_sq=365, emivita_lega=365, gamma=0.75
     for st, (k1, _) in K_STAGIONE.items():
         T, K1 = tutti[st], k1 * media[st]
         comune[st] = (T[0] + K1) / (T[1] + K1)
+    # CARTELLINI: andamento stagionale. Di solito l'inizio stagione ha più cartellini del resto (+3/+7% contro -1/-4%):
+    # il rapporto di oggi si confronta con quello delle stagioni passate allo stesso giorno, e il resto della stagione
+    # si prevede con la pendenza misurata (quanto di uno scarto di inizio stagione resta nel resto). Verificato sulle 8
+    # stagioni complete a metà ottobre (lascia-fuori-una-stagione): errore 0,048 contro 0,051 del fattore precedente;
+    # nel 2020/21 (stadi vuoti) il calo di inizio stagione era continuato, come quello del 2026/27 (nuovo arbitraggio).
+    passate = [(h[0] / h[1], h[3] / h[4]) for a, h in storico_cart.items() if h[2] >= 300 and h[5] >= 300]
+    T = tutti["cart"]
+    if len(passate) >= 4 and T[2] >= 100:
+        nE = math.exp(sum(math.log(e) for e, _ in passate) / len(passate)); nR = sum(r for _, r in passate) / len(passate)
+        xs_ = [math.log(e / nE) for e, _ in passate]; ys_ = [math.log(r / nR) for _, r in passate]
+        mx, my = sum(xs_) / len(xs_), sum(ys_) / len(ys_)
+        den = sum((x - mx) ** 2 for x in xs_)
+        b = min(max(sum((x - mx) * (y - my) for x, y in zip(xs_, ys_)) / den, 0.0), 1.0) if den else 0.0
+        E_ora = T[0] / T[1]
+        comune["cart"] = nR * (E_ora / nE) ** b
+        rel_base = E_ora                      # i campionati si confrontano con il rapporto comune di oggi
+    else:
+        rel_base = None
     fattori = {}
     for l, per in perl.items():
         fattori[l] = {}
@@ -180,6 +206,9 @@ def fattori_stagione(partite, oggi, emivita_sq=365, emivita_lega=365, gamma=0.75
             P = per[st]
             if k2 is None or not P[2]:
                 fattori[l][st] = round(comune[st], 3)
+            elif st == "cart" and rel_base:
+                K2 = k2 * media[st]             # scarto del campionato rispetto a tutti gli altri, frenato
+                fattori[l][st] = round(comune[st] * (P[0] + K2 * rel_base) / (P[1] * rel_base + K2 * rel_base), 3)
             else:
                 K2 = k2 * media[st]
                 fattori[l][st] = round((P[0] + K2 * comune[st]) / (P[1] + K2), 3)
