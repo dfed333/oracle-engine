@@ -98,6 +98,9 @@ def browser(tutto=False):
               for (const [k, v] of Object.entries(pm)) if (!ok(v) || v < -1e-9 || v > 1 + 1e-9) male.push(nome + ': mercato ' + k + ' = ' + v);
               if (Math.abs(pm['O2.5'] - r.o25) > 1e-6 || Math.abs(pm['1'] - r.p1) > 1e-6) male.push(nome + ': numeri diversi tra le sezioni');
               if (r.picks[0][1] !== principale(r).p) male.push(nome + ': prima uscita diversa dalla stellina');
+              if (f.q && r.fonte !== 'q') male.push(nome + ': ha le attese del mercato ma non le usa');
+              if (!['solidi', 'medi', 'scarsi'].includes(r.dati.t)) male.push(nome + ': dati = ' + r.dati.t);
+              if (a.liv === 'alta' && (a.val < 0.65 || r.dati.t === 'scarsi')) male.push(nome + ': stellina senza i requisiti');
             }
             return male.slice(0, 20); }""")
         errori += [f"numeri: {x}" for x in numeri]
@@ -120,7 +123,7 @@ def browser(tutto=False):
                 "STATO.giorno = D.F.length ? D.F[D.F.length-1].day : STATO.giorno; schermoPartite();",
                 "location.hash='#top'; router();",
                 "STATO.comb.vista='es'; schermoComb(); STATO.comb.giorno='3g'; schermoComb();",
-                "STATO.comb.vista='co'; for (const c of [100,90,85]) for (const f of ['tutti','esito','ou','gg','mg']) { STATO.comb.cap=c; STATO.comb.fam=f; schermoComb(); }",
+                "STATO.comb.vista='co'; for (const c of [80,75,70,65]) for (const f of ['tutti','esito','ou','gg','mg']) { STATO.comb.cap=c; STATO.comb.fam=f; schermoComb(); }",
                 "location.hash='#leghe'; router(); STATO.legheVista='conf'; vistaLeghe();",
                 "for (const s of [55,60,65,70]) { STATO.soglia=s; schermoConfronto(); } for (const p of ['10','3','1']) { STATO.per=p; schermoConfronto(); }",
                 "STATO.legheVista='cl'; vistaLeghe();",

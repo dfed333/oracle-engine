@@ -212,12 +212,11 @@ def riassunto_verifica(partite, leghe):
            "curve": {k: mappa_isotonica(cal["tab"][k]) for k in ("O25", "GG", "1", "X", "2")},
            "esatto1": round(esatti1, 4), "esatto3": round(esatti3, 4)}
     out.update(deriva(partite, leghe))
-    out["_grezze"] = grezze          # servono a prevedibilita(); build.py le toglie prima di pubblicare
     return out
 
 
 # ------------------------------------------------------------------
-# PREVEDIBILITÀ: chi rispetta di più i pronostici (stesso cervello dell'app)
+# FUNZIONI COMUNI CON L'APP (stesso cervello): correzione, allineamento, mercati delle combinazioni
 # ------------------------------------------------------------------
 
 def calib(curva, p):
@@ -281,7 +280,6 @@ def allinea(P0, t1x2, tO, tG):
 
 
 SOGLIE_SICURO = (0.55, 0.60, 0.65, 0.70)
-TETTI = (1.0, 0.90, 0.85)
 MG_TOT = [(1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (2, 3), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6), (4, 5), (4, 6)]
 MG_SQ = [(0, 1), (1, 2), (1, 3), (2, 3), (1, 4), (2, 4)]
 
@@ -330,89 +328,6 @@ def probabilita_mercati(P):
     for a, b in MG_SQ:
         out[f"MGC{a}-{b}"] = sum(casa[a:b + 1]); out[f"MGO{a}-{b}"] = sum(osp[a:b + 1])
     return out
-
-
-def prevedibilita(grezze, gamma, curve, squadre_ora, stagioni_squadre=3, minimo=30):
-    """
-    Su ogni partita della verifica (pronostico fatto con le sole partite precedenti) si guarda se il
-    modello ci ha preso: esito 1X2 più probabile, Over/Under 2.5, Gol/No Gol, risultato esatto tra i primi 3,
-    e quanti gol ha fatto e subito ogni squadra rispetto a quelli attesi. Campionati: tutte le stagioni
-    verificate. Squadre: ultime `stagioni_squadre` stagioni, solo quelle che giocano ora nei campionati coperti.
-    """
-    codici = sorted({r["cod"] for r in grezze})
-    recenti = set(codici[-stagioni_squadre:])
-    acc_l = defaultdict(lambda: defaultdict(float))
-    acc_s = defaultdict(lambda: defaultdict(float))
-    acc_m = defaultdict(lambda: defaultdict(lambda: [0, 0]))
-    ver_scelte = {c: defaultdict(lambda: [0, 0, 0.0]) for c in TETTI}
-    ver_esatti = {K: defaultdict(lambda: [0, 0, 0.0]) for K in (3, 4, 5)}
-    for r in grezze:
-        lc, lo = smorza(r["lc"], r["lo"], r["tot_lega"], gamma)
-        P0 = matrice(lc, lo, r["rho"])
-        p = probabilita(P0)
-        o25 = calib(curve.get("O25"), p["O25"])
-        gg = calib(curve.get("GG"), p["GG"])
-        q1, qx, q2 = p1x2(curve, p)
-        P = allinea(P0, (q1, qx, q2), o25, gg)
-        pc_ = {"1": q1, "X": qx, "2": q2}
-        mc = sum(i * P[i][j] for i in range(11) for j in range(11))
-        mo = sum(j * P[i][j] for i in range(11) for j in range(11))
-        celle = sorted(((P[i][j], i, j) for i in range(11) for j in range(11)), reverse=True)[:3]
-        gc, go = r["gc"], r["go"]
-        esito = max(("1", "X", "2"), key=lambda k: pc_[k])
-        vero = "1" if gc > go else ("X" if gc == go else "2")
-        h = {"esito": esito == vero, "ou": (o25 > .5) == (gc + go > 2), "gg": (gg > .5) == (gc > 0 and go > 0),
-             "ex": any((i, j) == (gc, go) for _, i, j in celle)}
-        # mercati con il modello "sicuro": stessa probabilità che l'app mostra (1X2 dalla matrice, Over e Gol/Gol verificati)
-        mk = acc_m[r["lega"]]
-        for chiave, prob, uscito in (("1", q1, gc > go), ("X", qx, gc == go), ("2", q2, gc < go),
-                                     ("O25", o25, gc + go > 2), ("U25", 1 - o25, gc + go <= 2),
-                                     ("GG", gg, gc > 0 and go > 0), ("NG", 1 - gg, not (gc > 0 and go > 0))):
-            for soglia in SOGLIE_SICURO:
-                if prob >= soglia:
-                    v = mk[(chiave, soglia)]; v[0] += 1; v[1] += uscito
-        mk[("tot", 0)][0] += 1
-        pm = probabilita_mercati(P)
-        for cap in TETTI:
-            k = max((k for k in pm if pm[k] <= cap), key=lambda k: pm[k])
-            v = ver_scelte[cap][int(min(pm[k], .999) / .05)]; v[0] += 1; v[1] += MERCATI_GEN[k](gc, go); v[2] += pm[k]
-        celle_k = sorted(((P[i][j], i, j) for i in range(11) for j in range(11)), reverse=True)
-        for K in (3, 4, 5):
-            cop = sum(c[0] for c in celle_k[:K])
-            v = ver_esatti[K][int(min(cop, .999) / .05)]; v[0] += 1; v[1] += any((i, j) == (gc, go) for _, i, j in celle_k[:K]); v[2] += cop
-        a = acc_l[r["lega"]]
-        a["n"] += 1
-        for k, v in h.items():
-            a[k] += v
-        a["gol_att"] += mc + mo; a["gol"] += gc + go
-        if r["cod"] in recenti:
-            for t, gf, gs, af, as_ in ((r["casa"], gc, go, mc, mo), (r["ospite"], go, gc, mo, mc)):
-                if squadre_ora.get(t) != r["lega"]:
-                    continue
-                b = acc_s[t]
-                b["n"] += 1
-                for k, v in h.items():
-                    b[k] += v
-                b["gf"] += gf; b["gs"] += gs; b["gf_att"] += af; b["gs_att"] += as_
-    pc = lambda a, k: round(100 * a[k] / a["n"], 1)
-    leghe = {l: {"n": int(a["n"]), "esito": pc(a, "esito"), "ou": pc(a, "ou"), "gg": pc(a, "gg"), "ex": pc(a, "ex"),
-                 "gol": round(a["gol"] / a["n"], 2), "gol_att": round(a["gol_att"] / a["n"], 2)}
-             for l, a in acc_l.items()}
-    squadre = {t: {"l": squadre_ora[t], "n": int(b["n"]), "esito": pc(b, "esito"), "ou": pc(b, "ou"), "gg": pc(b, "gg"),
-                   "ex": pc(b, "ex"), "gf": round(b["gf"] / b["n"], 2), "gs": round(b["gs"] / b["n"], 2),
-                   "dgf": round((b["gf"] - b["gf_att"]) / b["n"], 2), "dgs": round((b["gs"] - b["gs_att"]) / b["n"], 2)}
-               for t, b in acc_s.items() if b["n"] >= minimo}
-    mercati = {}
-    for l, mk in acc_m.items():
-        tot = mk[("tot", 0)][0]
-        mercati[l] = {f"{k}|{int(sg * 100)}": [v[0], round(100 * v[1] / v[0], 1), round(100 * v[0] / tot, 1)]
-                      for (k, sg), v in mk.items() if k != "tot" and v[0]}
-    fasce = lambda acc: [[f * 5, v[0], round(100 * v[2] / v[0], 1), round(100 * v[1] / v[0], 1)]
-                         for f, v in sorted(acc.items()) if v[0] >= 100]
-    return {"leghe": leghe, "squadre": squadre, "mercati": mercati,
-            "ver_scelte": {str(int(c * 100)): fasce(a) for c, a in ver_scelte.items()},
-            "ver_esatti": {str(K): fasce(a) for K, a in ver_esatti.items()},
-            "stag_l": [f"20{c[:2]}/{c[2:]}" for c in codici], "stag_s": [f"20{c[:2]}/{c[2:]}" for c in sorted(recenti)]}
 
 
 def numeri_campionati(partite, oggi):
@@ -493,3 +408,175 @@ def deriva(partite, leghe):
         tau[k] = math.sqrt(max(var - sum(rumore) / len(rumore), 0.0005))
     return {"tau_att": round(tau["att"], 4), "tau_dif": round(tau["dif"], 4),
             "cv_att": round(cv["att"], 4), "cv_dif": round(cv["dif"], 4)}
+
+
+# ------------------------------------------------------------------
+# VERIFICA DEL NUOVO MOTORE (attese del mercato) — è quella che l'app usa
+# ------------------------------------------------------------------
+
+TETTI_GIOCABILI = (0.80, 0.75, 0.70, 0.65)     # combinazioni: tetto alla probabilità di ogni scelta
+ESCLUSE_COMB = {"O0.5", "U4.5", "MG1-5", "MG1-6", "MG2-6"}   # troppo scontate: come ESCLUSE_COMB dell'app
+
+
+def _curva(punti, ampiezza=0.05, minimo=40):
+    acc = defaultdict(lambda: [0, 0])
+    for p, y in punti:
+        f = min(int(p / ampiezza), int(1 / ampiezza) - 1)
+        acc[f][0] += 1; acc[f][1] += y
+    fasce = [[round(f * ampiezza, 2), n, h / n] for f, (n, h) in sorted(acc.items()) if n >= minimo]
+    return mappa_isotonica(fasce, ampiezza)
+
+
+def _grezze_da(P):
+    p = probabilita(P)
+    return p["1"], p["X"], p["2"], p["O25"], p["GG"]
+
+
+def _curve(righe):
+    """righe: (p1, px, p2, o25, gg, gc, go) → curve 'probabilità → frequenza reale' per 1, X, 2, O25, GG."""
+    return {"1": _curva([(r[0], r[5] > r[6]) for r in righe]), "X": _curva([(r[1], r[5] == r[6]) for r in righe]),
+            "2": _curva([(r[2], r[5] < r[6]) for r in righe]), "O25": _curva([(r[3], r[5] + r[6] > 2) for r in righe]),
+            "GG": _curva([(r[4], r[5] > 0 and r[6] > 0) for r in righe])}
+
+
+def finali(P0, grezze, curve):
+    """Matrice finale: la stessa operazione dell'app (1X2 corretto e riportato a 100, Over 2.5 e Gol/Gol corretti)."""
+    q1, qx, q2 = p1x2(curve, {"1": grezze[0], "X": grezze[1], "2": grezze[2]})
+    return allinea(P0, (q1, qx, q2), calib(curve.get("O25"), grezze[3]), calib(curve.get("GG"), grezze[4]))
+
+
+def verifica_mercato(partite, leghe, mostrate, squadre_ora, stagioni_squadre=3, minimo_sq=30):
+    """
+    Verifica del motore dell'app su tutte le partite con quote dei campionati (anche quelli solo-storico):
+      - fonte "q": le quote della partita (raccolte prima della partita), tolto il margine → gol attesi → matrice;
+      - fonte "r": la forza dalle quote delle partite PRECEDENTI (per le partite che le quote non le hanno ancora).
+    Per ognuna: curve di correzione (quando dice 70%, quante volte esce davvero), tabelle, risultati esatti.
+    Con la fonte "q" si calcola anche il Confronto (prevedibilità di campionati e squadre, combinazioni).
+    Ritorna (V, PV).
+    """
+    from mercato import matrice as mat, rho_di
+    prime = {}
+    for m in partite:
+        k = m["lega"]
+        if k not in prime or m["stagione"] < prime[k]:
+            prime[k] = m["stagione"]
+    rq, rr = [], []
+    for m in partite:
+        if not m.get("lk"):
+            continue
+        rho = rho_di(leghe, m["lega"])
+        q = m["q"]
+        gg = probabilita(mat(m["lk"][0], m["lk"][1], rho))["GG"]
+        rq.append((q[0], q[1], q[2], q[3], gg, m["gc"], m["go"]))
+        if m.get("mr") and m["stagione"] != prime[m["lega"]]:
+            rr.append(_grezze_da(mat(m["mr"][0], m["mr"][1], rho)) + (m["gc"], m["go"]))
+    cq, cr = _curve(rq), _curve(rr)
+
+    def riassunto(righe, curve):
+        """Numeri della fonte con le probabilità corrette (quelle che l'app mostra)."""
+        acc = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+        fav = ou = ggh = 0
+        for r in righe:
+            q1, qx, q2 = p1x2(curve, {"1": r[0], "X": r[1], "2": r[2]})
+            o, g = calib(curve["O25"], r[3]), calib(curve["GG"], r[4])
+            e = esiti(r[5], r[6])
+            pp = {"1": q1, "X": qx, "2": q2, "O25": o, "U25": 1 - o, "GG": g, "NG": 1 - g}
+            for k, v in pp.items():
+                f = min(int(v / .05), 19); a = acc[k][f]; a[0] += 1; a[1] += e[k]
+            fav += e[max(("1", "X", "2"), key=lambda k: pp[k])]
+            ou += (o > .5) == e["O25"]; ggh += (g > .5) == e["GG"]
+        n = len(righe)
+        tab = {k: [[round(f * .05, 2), v[0], round(v[1] / v[0], 4)] for f, v in sorted(fa.items()) if v[0] >= 40]
+               for k, fa in acc.items()}
+        return {"n": n, "acc1x2": round(fav / n, 4), "ou": round(ou / n, 4), "gg": round(ggh / n, 4), "curve": curve, "tab": tab}
+
+    V = {"q": riassunto(rq, cq), "r": riassunto(rr, cr)}
+
+    # ---- passata finale con le matrici dell'app (fonte q): risultati esatti + Confronto ----
+    codici = sorted({m["stagione"] for m in partite if m.get("lk")})
+    recenti = set(codici[-stagioni_squadre:])
+    acc_l = defaultdict(lambda: defaultdict(float))
+    acc_s = defaultdict(lambda: defaultdict(float))
+    acc_m = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+    ver_scelte = {c: defaultdict(lambda: [0, 0, 0.0]) for c in TETTI_GIOCABILI}
+    ver_esatti = {K: defaultdict(lambda: [0, 0, 0.0]) for K in (3, 4, 5)}
+    ex1 = ex3 = cop1 = cop3 = 0.0
+    n_tot = 0
+    stag_lega = defaultdict(set)
+    for m in partite:
+        if not m.get("lk"):
+            continue
+        rho = rho_di(leghe, m["lega"])
+        P0 = mat(m["lk"][0], m["lk"][1], rho)
+        gg0 = probabilita(P0)["GG"]
+        P = finali(P0, (m["q"][0], m["q"][1], m["q"][2], m["q"][3], gg0), cq)
+        gc, go = m["gc"], m["go"]
+        celle = sorted(((P[i][j], i, j) for i in range(11) for j in range(11)), reverse=True)
+        n_tot += 1
+        ex1 += (celle[0][1], celle[0][2]) == (gc, go)
+        ex3 += any((i, j) == (gc, go) for _, i, j in celle[:3])
+        cop1 += celle[0][0]; cop3 += sum(c[0] for c in celle[:3])
+        if m["lega"] not in mostrate:
+            continue
+        stag_lega[m["lega"]].add(m["stagione"])
+        pm = probabilita_mercati(P)
+        q1, qx, q2, o25, gg = pm["1"], pm["X"], pm["2"], pm["O2.5"], pm["GG"]
+        mc = sum(i * P[i][j] for i in range(11) for j in range(11))
+        mo = sum(j * P[i][j] for i in range(11) for j in range(11))
+        pc_ = {"1": q1, "X": qx, "2": q2}
+        esito = max(("1", "X", "2"), key=lambda k: pc_[k])
+        vero = "1" if gc > go else ("X" if gc == go else "2")
+        h = {"esito": esito == vero, "ou": (o25 > .5) == (gc + go > 2), "gg": (gg > .5) == (gc > 0 and go > 0),
+             "ex": any((i, j) == (gc, go) for _, i, j in celle[:3])}
+        mk = acc_m[m["lega"]]
+        for chiave, prob, uscito in (("1", q1, gc > go), ("X", qx, gc == go), ("2", q2, gc < go),
+                                     ("O25", o25, gc + go > 2), ("U25", 1 - o25, gc + go <= 2),
+                                     ("GG", gg, gc > 0 and go > 0), ("NG", 1 - gg, not (gc > 0 and go > 0))):
+            for soglia in SOGLIE_SICURO:
+                if prob >= soglia:
+                    v = mk[(chiave, soglia)]; v[0] += 1; v[1] += uscito
+        mk[("tot", 0)][0] += 1
+        for cap in TETTI_GIOCABILI:
+            k = max((k for k in pm if pm[k] <= cap and k not in ESCLUSE_COMB), key=lambda k: pm[k])
+            v = ver_scelte[cap][int(min(pm[k], .999) / .05)]; v[0] += 1; v[1] += MERCATI_GEN[k](gc, go); v[2] += pm[k]
+        for K in (3, 4, 5):
+            cop = sum(c[0] for c in celle[:K])
+            v = ver_esatti[K][int(min(cop, .999) / .05)]; v[0] += 1
+            v[1] += any((i, j) == (gc, go) for _, i, j in celle[:K]); v[2] += cop
+        a = acc_l[m["lega"]]
+        a["n"] += 1
+        for k, v in h.items():
+            a[k] += v
+        a["gol_att"] += mc + mo; a["gol"] += gc + go
+        if m["stagione"] in recenti:
+            for t, gf, gs, af, as_ in ((m["casa"], gc, go, mc, mo), (m["ospite"], go, gc, mo, mc)):
+                if squadre_ora.get(t) != m["lega"]:
+                    continue
+                b = acc_s[t]
+                b["n"] += 1
+                for k, v in h.items():
+                    b[k] += v
+                b["gf"] += gf; b["gs"] += gs; b["gf_att"] += af; b["gs_att"] += as_
+    V["q"].update(esatto1=round(ex1 / n_tot, 4), esatto3=round(ex3 / n_tot, 4),
+                  cop1=round(cop1 / n_tot, 4), cop3=round(cop3 / n_tot, 4))
+    V["stagioni"] = [f"20{c[:2]}/{c[2:]}" for c in codici]
+    pc = lambda a, k: round(100 * a[k] / a["n"], 1)
+    leghe_pv = {l: {"n": int(a["n"]), "st": len(stag_lega[l]), "esito": pc(a, "esito"), "ou": pc(a, "ou"), "gg": pc(a, "gg"),
+                    "ex": pc(a, "ex"), "gol": round(a["gol"] / a["n"], 2), "gol_att": round(a["gol_att"] / a["n"], 2)}
+                for l, a in acc_l.items()}
+    squadre = {t: {"l": squadre_ora[t], "n": int(b["n"]), "esito": pc(b, "esito"), "ou": pc(b, "ou"), "gg": pc(b, "gg"),
+                   "ex": pc(b, "ex"), "gf": round(b["gf"] / b["n"], 2), "gs": round(b["gs"] / b["n"], 2),
+                   "dgf": round((b["gf"] - b["gf_att"]) / b["n"], 2), "dgs": round((b["gs"] - b["gs_att"]) / b["n"], 2)}
+               for t, b in acc_s.items() if b["n"] >= minimo_sq}
+    mercati = {}
+    for l, mk in acc_m.items():
+        tot = mk[("tot", 0)][0]
+        mercati[l] = {f"{k}|{int(sg * 100)}": [v[0], round(100 * v[1] / v[0], 1), round(100 * v[0] / tot, 1)]
+                      for (k, sg), v in mk.items() if k != "tot" and v[0]}
+    fasce = lambda acc: [[f * 5, v[0], round(100 * v[2] / v[0], 1), round(100 * v[1] / v[0], 1)]
+                         for f, v in sorted(acc.items()) if v[0] >= 100]
+    PV = {"leghe": leghe_pv, "squadre": squadre, "mercati": mercati,
+          "ver_scelte": {str(int(round(c * 100))): fasce(a) for c, a in ver_scelte.items()},
+          "ver_esatti": {str(K): fasce(a) for K, a in ver_esatti.items()},
+          "stag_l": V["stagioni"], "stag_s": [f"20{c[:2]}/{c[2:]}" for c in sorted(recenti)]}
+    return V, PV

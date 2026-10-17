@@ -23,6 +23,7 @@ sys.path.insert(0, QUI)
 
 import arbitri     # noqa: E402
 import engine      # noqa: E402
+import mercato     # noqa: E402
 import modello     # noqa: E402
 import sorgenti    # noqa: E402
 import taratura    # noqa: E402
@@ -74,6 +75,11 @@ def main():
     leghe, squadre_eng = engine.costruisci_da_dati(partite)
     if len(partite) < 5000:
         raise SystemExit("Troppe poche partite scaricate: aggiornamento annullato, resta online la versione precedente.")
+    mostrate = set(engine.LEGHE_FD.values())          # Serie B, Championship e 2. Bundesliga: solo storico
+    log("    attese del mercato: gol attesi di ogni partita con quote e forza delle squadre…")
+    cache_gol = mercato.aggiungi_gol_attesi(partite, leghe)
+    forza_q, leghe_q, storia_q = mercato.forza_dalle_quote(partite, leghe)
+    log(f"    {sum(1 for m in partite if m.get('lk'))} partite con quote ({cache_gol.nuovi} nuove), forza di {len(forza_q)} squadre")
 
     leghe_sq, presenze, ultima = defaultdict(set), {}, {}
     for m in partite:
@@ -121,12 +127,20 @@ def main():
             return base[t]["att"] * s, base[t]["dif"] / s
         v = solo.get(t, [0.85, 1.2, 0])
         return v[0], v[1]
+    # livello di gol delle coppe per la forza dalle quote (verificato sulle partite di coppa passate)
+    B_q = mercato.livello_coppe(coppe, storia_q, forza, solo, oggi)
+    log("    livello di gol delle coppe (forza dalle quote):", B_q)
     dna_coppe = engine.carica_coppe()
     rho_c = rho_coppe(coppe, AD, B, -0.05)
 
     log("5/7 calendario e risultati della finestra…")
     finestra = sorgenti.partite_finestra(ab, partite)
-    log("    partite in finestra:", len(finestra))
+    for f in finestra:
+        if f.get("q"):
+            lh, la = cache_gol.get(f["q"], mercato.rho_di(leghe, f["comp"]))
+            f["q"] = list(f["q"]) + [lh, la]
+    cache_gol.salva()
+    log("    partite in finestra:", len(finestra), "· con le attese del mercato:", sum(1 for f in finestra if f.get("q")))
     log("    arbitri: storico, stagione in corso e designati…")
     try:
         AR, designati, diag_arb = arbitri.costruisci(partite, finestra, oggi, log=log)
@@ -151,10 +165,9 @@ def main():
     log("    livello della stagione in corso rispetto alla memoria di un anno (tutti i campionati):",
         {k: f"{(v - 1) * 100:+.1f}% su {fs_n.get(k, 0)} partite" for k, v in fs_comune.items()})
 
-    log("    verifica sul passato e misura dell'incertezza…")
+    log("    verifica sul passato (modello statistico, serve solo alle squadre senza quote)…")
     VER = verifica.riassunto_verifica(partite, leghe)
-    grezze = VER.pop("_grezze")
-    log(f"    {VER['n']} partite verificate · smorzamento gol {VER['gamma']} · favorito indovinato {VER['acc1x2']:.1%}")
+    log(f"    modello statistico: {VER['n']} partite · favorito indovinato {VER['acc1x2']:.1%}")
     # quante informazioni ha ogni squadra: campione effettivo (pesato) e partite di questa stagione
     cod_corr = engine._codici_stagioni()[-1]
     info = defaultdict(lambda: [0.0, 0.0, 0])
@@ -166,16 +179,24 @@ def main():
             if m.get("stagione") == cod_corr:
                 v[2] += 1
 
-    log("    chi rispetta di più i pronostici (campionati e squadre)…")
+    log("    verifica del motore dell'app (attese del mercato) e Confronto…")
     squadre_ora = {t: ultima[t][1] for t in ultima if ultima[t][0] >= oggi - datetime.timedelta(days=200)}
-    PV = verifica.prevedibilita(grezze, VER["gamma"], VER["curve"], squadre_ora)
-    PV["num"] = verifica.numeri_campionati(partite, oggi)
+    VQ, PV = verifica.verifica_mercato(partite, leghe, mostrate, squadre_ora)
+    VV = {"gamma": VER["gamma"], "curve": VER["curve"], "q": VQ["q"], "r": VQ["r"], "stagioni": VQ["stagioni"], "n": VQ["q"]["n"],
+         "vecchio": {"n": VER["n"], "acc1x2": VER["acc1x2"]}}
+    log(f"    con le quote: {VQ['q']['n']} partite · favorito {VQ['q']['acc1x2']:.1%} · Over/Under {VQ['q']['ou']:.1%} · "
+        f"Gol/No Gol {VQ['q']['gg']:.1%} · esatto {VQ['q']['esatto1']:.1%} (primi 3: {VQ['q']['esatto3']:.1%})")
+    log(f"    forza dalle quote (partite senza quote): {VQ['r']['n']} partite · favorito {VQ['r']['acc1x2']:.1%} · "
+        f"Over/Under {VQ['r']['ou']:.1%} · Gol/No Gol {VQ['r']['gg']:.1%}")
+    PV["num"] = {l: v for l, v in verifica.numeri_campionati(partite, oggi).items() if l in mostrate}
     log(f"    prevedibilità: {len(PV['leghe'])} campionati, {len(PV['squadre'])} squadre")
 
     log("7/7 scrivo dist/…")
     # ---- campionati ----
     L = {}
     for nome, v in leghe.items():
+        if nome not in mostrate:
+            continue
         V = mv.get(nome, {})
         fs = FS.get(nome) or dict(fs_comune)
         fg, fc, fk = fs["gol"], fs["cor"], fs["cart"]
@@ -195,6 +216,8 @@ def main():
             "p1": v.get("p1"), "px": v.get("px"), "p2": v.get("p2"), "ov": v.get("ov"), "gg": v.get("gg"),
             "top": v.get("top"), "s": forza.get(nome, 1.0), "x": x,
         }
+        if nome in leghe_q:
+            L[nome]["m"] = [r3(leghe_q[nome][0]), r3(leghe_q[nome][1])]
     DEF = {k: r3(sum(l[k] for l in L.values()) / len(L)) for k in ("vcc", "vco", "vkc", "vko")}
 
     # ---- coppe ----
@@ -209,13 +232,13 @@ def main():
         d = dna_coppe.get(nome, {})
         lv = livello.get(nome)
         tot_attuale = lv[1] / lv[0] if lv and lv[0] > 20 else d.get("gc", 1.5) + d.get("gt", 1.2)
-        CUP[nome] = {"B": b, "rho": rho_c.get(nome, -0.05), "tot": r3(tot_attuale),
+        CUP[nome] = {"B": b, "Bq": B_q.get(nome, b), "rho": rho_c.get(nome, -0.05), "tot": r3(tot_attuale),
                      "p1": d.get("p1"), "px": d.get("px"), "p2": d.get("p2"),
                      "ov": d.get("ov"), "gg": d.get("gg"), "n": d.get("n"), "anni": d.get("anni")}
 
     # ---- squadre ----
     in_finestra = {f["c"] for f in finestra} | {f["o"] for f in finestra}
-    attive = {t for t, (d, _) in ultima.items() if (oggi - d).days < 3 * 365} | (in_finestra & set(base))
+    attive = {t for t, (d, l) in ultima.items() if (oggi - d).days < 3 * 365 and l in mostrate} | (in_finestra & set(base))
     Q, allenatori_attuali = {}, {}
     for t in sorted(attive):
         if t not in base or t not in squadre_eng:
@@ -247,6 +270,9 @@ def main():
             q["nota"] = nota
         if t in tiri:
             q["t"] = tiri[t]
+        fq = forza_q.get(t)
+        if fq and fq[0] == q["l"]:
+            q["m"] = [round(fq[1], 4), round(fq[2], 4), fq[3]]     # forza dalle quote: attacco, difesa, partite nell'ultimo anno
         Q[t] = q
     tre_anni_fa = oggi - datetime.timedelta(days=3 * 365)
     recenti_coppa = defaultdict(int)
@@ -281,6 +307,7 @@ def main():
                 C[nome]["st"] = st
 
     # ---- partite, forma, precedenti ----
+    classif = {l: v for l, v in classif.items() if l in mostrate}
     rilevanti = in_finestra | {r[0] for rows in classif.values() for r in rows}
     FO = {t: v for t, v in forma.items() if t in rilevanti}
     derby = [[*sorted(k), v[0], v[1]] for k, v in engine.DERBIES.items()]
@@ -308,7 +335,7 @@ def main():
             "controllo": {"arbitri": diag_arb, "calendario": sorgenti.CONTROLLO},
         },
         "L": L, "CUP": CUP, "DEF": DEF, "Q": Q, "C": C, "F": finestra, "H": prec, "FO": FO, "CL": classif,
-        "D": derby, "STILI": engine.STYLES, "V": VER, "K": K, "S": S, "CAP": modello.CAP_CAR, "AR": AR, "PV": PV,
+        "D": derby, "STILI": engine.STYLES, "V": VV, "K": K, "S": S, "CAP": modello.CAP_CAR, "AR": AR, "PV": PV,
     }
 
     os.makedirs(DIST, exist_ok=True)

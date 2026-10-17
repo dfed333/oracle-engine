@@ -9,10 +9,13 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
   Champions, Europa e Conference League), con le probabilità 1-X-2, l'affidabilità di ogni partita e la stellina sulle partite da guardare.
 - **Scheda partita**: pronostico, gol, angoli, cartellini, tiri, allenatori,
   precedenti e forma. Per le partite giocate, le statistiche reali.
-- **Affidabilità**: ogni partita ha la sua percentuale. È la probabilità dell'uscita
-  principale (verificata sul passato) meno il margine d'incertezza di quella
-  partita (inizio stagione, allenatore nuovo, squadre viste solo in coppa).
-  Dal 65% in su la partita prende la stellina "Da guardare".
+- **Il pronostico**: per ogni partita l'uscita più probabile (1, X, 2, Over/Under 2.5,
+  Gol/No Gol) con la sua percentuale, verificata sul passato, e "dati solidi/medi/scarsi"
+  (solidi = la partita ha le quote o le squadre hanno molte partite nel campionato; medi =
+  coppa europea o squadra con poche partite; scarsi = squadra vista solo in coppa).
+  Stellina "Da guardare" dal 65% con dati non scarsi.
+- **Com'è andata**: sulle partite giocate il pronostico fatto prima della partita con ✓ o ✗,
+  e il riepilogo del giorno (quante volte è uscito contro quante ce lo aspettavamo).
 - **Da guardare**: le partite con la stellina e il motivo, più la classifica delle
   partite con più gol, angoli, cartellini o tiri attesi.
 - **Classifiche**: classifica della stagione e "DNA" di ogni campionato.
@@ -35,48 +38,55 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
 
 | Dato | Fonte |
 |---|---|
-| Partite con risultati, tiri, angoli, cartellini, falli, xG (10 stagioni, 11 campionati) | football-data.co.uk |
+| Partite con risultati, tiri, angoli, cartellini, falli, xG e quote pre-partita (10 stagioni, 13 campionati + Serie B, Championship, 2. Bundesliga solo per lo storico) | football-data.co.uk |
+| Quote delle partite in arrivo (solo per calcolare le probabilità, mai mostrate) | football-data.co.uk (fixtures.csv) |
 | Calendari e risultati della stagione, storico delle coppe europee | fixturedownload.com |
 | Allenatori in carica e storico dei cambi panchina | Wikipedia (tabelle "Personnel" e "Managerial changes") |
 | Arbitri: storico 2012-2026, cartellini, rigori (11 campionati + 3 coppe) | transfermarkt-datasets (archivio pubblico) |
 | Arbitri della stagione in corso e designati | football-data.co.uk (Inghilterra, Scozia); football-data.org con chiave gratuita (7 campionati + Champions) |
 
-## Come ragiona il modello
+## Come ragiona il motore (dal 17/10/2026)
 
-Per ogni squadra il pronostico unisce tre fonti, ognuna pesata per quante partite
-reali la sostengono (ponderazione per credibilità):
+Il punto di partenza sono **le attese del mercato delle scommesse**: le quote medie dei
+bookmaker raccolte prima della partita (football-data.co.uk: CSV dei risultati per il
+passato, `fixtures.csv` per le partite in arrivo), tolto il margine del bookmaker. Le quote
+**non si mostrano mai** nell'app: diventano probabilità e gol attesi.
 
-1. **Storia della squadra**: 10 stagioni, le più recenti contano di più, corrette
-   per la forza degli avversari; quando ci sono gli xG, ogni partita vale metà gol
-   reali e metà xG.
-2. **L'allenatore in questa squadra**: peso = partite / (partite + 25) per i gol.
-   3 partite pesano circa il 10%, nove anni quasi tutto.
-3. **La carriera dell'allenatore altrove**: quanto cambia le sue squadre rispetto
-   al loro standard, con un tetto (la rosa è diversa).
+Perché: sulle 30.895 partite della vecchia verifica (pronostici fatti solo con il passato)
+le quote battono il nostro modello statistico su tutto (favorito 52,3% contro 50,9%,
+Over/Under 2.5 58,5% contro 56,9%, Gol/No Gol 55,3% contro 54,4%, risultato esatto più
+probabile 13,5% contro 13,2%) e qualsiasi mix tra i due peggiora rispetto alle quote da sole.
+Quando il modello e le quote non erano d'accordo di oltre 10 punti, avevano ragione le quote.
 
-Seconde divisioni (Liga 2, Ligue 2): la loro forza rispetto alla prima divisione è
-misurata sulle squadre promosse e retrocesse, così una neopromossa non sembra una big.
-Poi: forza dei campionati misurata sui risultati europei, stile di gioco degli
-allenatori, derby, precedenti (peso piccolo), assenze indicate dall'utente.
-Verifica sul passato (verifica.py): per ogni stagione dalla terza in poi il modello
-rifà i pronostici usando solo le partite precedenti e li confronta con i risultati
-veri (oltre 25.000 partite). Da qui lo smorzamento del totale gol (il modello grezzo
-esagera le partite "da tanti" o "da pochi" gol) e la correzione di Over/Under e Gol/No Gol.
-Taratura (taratura.py): partita per partita, come se il modello girasse ogni giorno,
-si sceglie la memoria che sbaglia meno. Risultato: le partite pesano la metà dopo
-un anno (non tre); il livello di gol delle coppe si stima con memoria di 8 mesi;
-la parte della carriera di un allenatore che si ripete in una squadra nuova è
-misurata sui cambi di panchina reali (circa il 10-20%) e ricalcolata a ogni aggiornamento.
-Livello della stagione in corso (taratura.fattori_stagione): nel 2026/27, dopo il
-Mondiale, nei primi mesi ci sono più gol (2,95 a partita contro 2,65-2,78) e tiri e
-meno cartellini (4,05 contro 4,4-4,8). La memoria di un anno arriva in ritardo, quindi
-si confrontano valori veri e previsti della stagione, prima su tutti i campionati
-insieme e poi per campionato, con pesi scelti sulle 8 stagioni di verifica.
-Arbitro: fattore cartellini = (rapporti "cartellini / media" delle sue partite, memoria
-1 anno, + 10) / (partite + 10), verificato su 41.557 partite. I suoi rigori non
-prevedono quelli futuri: si mostrano ma non entrano nel calcolo.
-Gol: matrice Dixon-Coles esatta. Angoli e cartellini: 10.000 simulazioni
-Monte Carlo correlate al punteggio.
+1. **Quote → gol attesi** (`mercato.py`): per ogni partita con quote si cercano i gol attesi
+   delle due squadre (Poisson + Dixon-Coles) che riproducono 1, 2 e Over 2.5 del mercato.
+2. **Correzione sul passato** (`verifica.verifica_mercato`): curve "quando le quote dicono X%,
+   quante volte esce davvero" per 1, X, 2, Over 2.5 e Gol/Gol, su 50.879 partite di 16
+   campionati in 10 anni. Corregge la distorsione nota del mercato: le favorite forti escono
+   più di quanto dicono le quote (80-85% → 87%), le sfavorite meno; il Gol/Gol esce circa
+   1,5 punti più spesso. Provate e scartate (nessun miglioramento su stagioni mai viste):
+   correzioni per campionato, per periodo della stagione, mix con il modello statistico,
+   "tendenza" delle squadre che hanno fatto più gol del previsto (non continua).
+3. **Forza dalle quote** (per le partite che le quote non le hanno ancora: coppe europee,
+   giornate lontane): attacco e difesa di ogni squadra imparati dalle attese del mercato delle
+   sue partite precedenti, partita per partita (`mercato.forza_dalle_quote`, passo 0,3).
+   Verificata: favorito 50,6% e Over/Under 57,8% contro 51,2% e 57,9% delle quote vere.
+   In coppa si moltiplica per la forza dei campionati misurata sui risultati europei e per il
+   livello di gol della coppa (`mercato.livello_coppe`, memoria 1 anno): verificato sulle
+   2.758 partite di coppa passate stimando il livello solo con le partite precedenti (prima
+   l'app prevedeva 3,27 gol a partita contro 2,99 veri, ora 2,95).
+4. Squadre senza quote (viste solo in coppa): storia dei risultati (vecchio modello, smorzato).
+
+Da un'unica matrice dei risultati, allineata alle probabilità corrette, escono tutti i numeri
+sui gol (risultati esatti, Over/Under, multigol, Gol/Gol). Gli **allenatori** non entrano
+nel calcolo dei gol (il mercato li conosce già): si mostrano i loro numeri veri, con la
+carriera che comprende anche Serie B, Championship e 2. Bundesliga (lette solo per lo
+storico, le loro partite non compaiono nell'app). Angoli e cartellini: profili di squadra,
+allenatore, stile, derby e arbitro, 10.000 simulazioni correlate al punteggio.
+
+**Combinazioni**: per ogni partita la scelta più probabile sotto un tetto (80/75/70/65%),
+senza le giocate quasi scontate (Over 0.5, Under 4.5, Multigol 1-5, 1-6, 2-6); verificate
+sul passato con le stesse regole.
 
 ## Aggiornamento
 

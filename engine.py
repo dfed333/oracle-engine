@@ -104,8 +104,17 @@ LEGHE_FD = {
     "F2":  "Ligue 2",
 }
 
+# Campionati letti SOLO per lo storico (carriera degli allenatori, squadre neopromosse):
+# le loro partite non compaiono nell'app
+LEGHE_STORIA = {
+    "I2":  "Serie B",
+    "E1":  "Championship",
+    "D2":  "2. Bundesliga",
+}
+
 # seconde divisioni e prima divisione dello stesso paese (per le squadre promosse/retrocesse)
-SECONDE = {"Liga 2": "La Liga", "Ligue 2": "Ligue 1"}
+SECONDE = {"Liga 2": "La Liga", "Ligue 2": "Ligue 1", "Serie B": "Serie A",
+           "Championship": "Premier League", "2. Bundesliga": "Bundesliga"}
 
 # Traduzione nomi football-data → nomi canonici del simulatore
 FD_RENAME = {
@@ -147,7 +156,7 @@ RHO_LEGA = {
     "Bundesliga": -0.06, "Ligue 1": -0.10, "Primeira Liga": -0.11,
     "Eredivisie": -0.06, "Pro League (Bel)": -0.08, "Süper Lig (Tur)": -0.10,
     "Super League (Gre)": -0.12, "Premiership (Sco)": -0.09,
-    "Liga 2": -0.12, "Ligue 2": -0.11,
+    "Liga 2": -0.12, "Ligue 2": -0.11, "Serie B": -0.12, "Championship": -0.09, "2. Bundesliga": -0.07,
 }
 RHO_DEFAULT = -0.10
 
@@ -167,6 +176,9 @@ FALLBACK_LEGHE = {
     "Premiership (Sco)":  {"gol_casa": 1.55, "gol_trasferta": 1.25, "corner": 10.0, "cart": 4.0},
     "Liga 2":             {"gol_casa": 1.30, "gol_trasferta": 0.95, "corner": 9.4,  "cart": 5.2},
     "Ligue 2":            {"gol_casa": 1.40, "gol_trasferta": 1.05, "corner": 9.5,  "cart": 4.4},
+    "Serie B":            {"gol_casa": 1.35, "gol_trasferta": 1.05, "corner": 9.6,  "cart": 5.0},
+    "Championship":       {"gol_casa": 1.45, "gol_trasferta": 1.15, "corner": 10.3, "cart": 4.0},
+    "2. Bundesliga":      {"gol_casa": 1.60, "gol_trasferta": 1.30, "corner": 9.8,  "cart": 4.2},
 }
 
 # ------------------------------------------------------------------
@@ -581,17 +593,56 @@ def _to_float(x):
         return None
 
 
+def _devig(quote):
+    """Quote → probabilità, togliendo il margine del bookmaker (in proporzione)."""
+    try:
+        q = [float(x) for x in quote]
+    except (TypeError, ValueError):
+        return None
+    if any(not (x > 1.0) for x in q):
+        return None
+    inv = [1 / x for x in q]
+    s = sum(inv)
+    return [x / s for x in inv]
+
+
+# colonne delle quote nei CSV di football-data, in ordine di preferenza: media di tutti i
+# bookmaker (dal 2019), media Betbrain (prima), poi i singoli
+_COL_1X2 = (("AvgH", "AvgD", "AvgA"), ("BbAvH", "BbAvD", "BbAvA"), ("PSH", "PSD", "PSA"), ("B365H", "B365D", "B365A"))
+_COL_OU = (("Avg>2.5", "Avg<2.5"), ("BbAv>2.5", "BbAv<2.5"), ("P>2.5", "P<2.5"), ("B365>2.5", "B365<2.5"))
+
+
+def quote_riga(riga):
+    """
+    Attese del mercato per una partita (riga di un CSV di football-data): [p1, pX, p2, pOver2.5]
+    senza margine, oppure None. Sono le quote raccolte prima della partita (non quelle di chiusura),
+    le stesse che il file fixtures.csv pubblica per le partite in arrivo.
+    """
+    x12 = ou = None
+    for c in _COL_1X2:
+        x12 = _devig([riga.get(k) for k in c])
+        if x12:
+            break
+    for c in _COL_OU:
+        ou = _devig([riga.get(k) for k in c])
+        if ou:
+            break
+    if not x12 or not ou:
+        return None
+    return [round(x12[0], 5), round(x12[1], 5), round(x12[2], 5), round(ou[0], 5)]
+
+
 def carica_partite():
     """
-    Scarica le ultime N_STAGIONI per ogni lega in LEGHE_FD.
+    Scarica le ultime N_STAGIONI per ogni lega in LEGHE_FD (e in LEGHE_STORIA, solo storico).
     Ritorna (lista_partite, conteggi_per_lega).
-    Ogni partita: dict con lega, peso temporale, gol, corner, cartellini.
+    Ogni partita: dict con lega, peso temporale, gol, corner, cartellini, attese del mercato.
     """
     stagioni = _codici_stagioni()
     oggi = datetime.date.today()
     partite, conteggi = [], Counter()
 
-    for div, lega in LEGHE_FD.items():
+    for div, lega in list(LEGHE_FD.items()) + list(LEGHE_STORIA.items()):
         for cod in stagioni:
             # la stagione più recente viene sempre riscaricata (si aggiorna di settimana in settimana)
             testo = _scarica_csv(cod, div, usa_cache=(cod != stagioni[-1]))
@@ -622,7 +673,7 @@ def carica_partite():
                     "fal_c": _to_int(riga.get("HF")), "fal_o": _to_int(riga.get("AF")),
                     "xg_c": _to_float(riga.get("HxG")), "xg_o": _to_float(riga.get("AxG")),
                     "arb": (riga.get("Referee") or "").strip() or None,
-                    "stagione": cod,
+                    "stagione": cod, "q": quote_riga(riga),
                 })
                 conteggi[lega] += 1
     return partite, conteggi

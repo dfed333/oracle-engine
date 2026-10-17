@@ -128,6 +128,7 @@ def chiave(s):
 
 # nomi esterni → nome nel database (chiavi già normalizzate con norm())
 ALIAS_SQUADRE = {
+    "v entella": "Virtus Entella", "peterborough united": "Peterboro", "queens park rangers": "QPR",
     "internazionale": "Inter", "inter milan": "Inter", "fc internazionale milano": "Inter",
     "ac milan": "Milan", "hellas verona": "Verona", "ss lazio": "Lazio", "as roma": "Roma",
     "spurs": "Tottenham", "tottenham hotspur": "Tottenham",
@@ -281,6 +282,10 @@ PAGINE_WIKI = {
     "Premiership (Sco)": ["{s} Scottish Premiership"],
     "Liga 2": ["{s} Segunda División"],
     "Ligue 2": ["{s} Ligue 2"],
+    # solo storico (carriere degli allenatori, neopromosse)
+    "Serie B": ["{s} Serie B"],
+    "Championship": ["{s} EFL Championship"],
+    "2. Bundesliga": ["{s} 2. Bundesliga"],
 }
 
 _MESI = {m: i for i, m in enumerate(
@@ -505,8 +510,13 @@ def leggi_pagina_wiki(lega, anno):
             continue
         c_out, c_in = _col(intest, "outgoing"), _col(intest, "incoming", "replaced by")
         if c_out is not None and c_in is not None:
+            # 2. Bundesliga: "Exit date / Departed on" e "Incoming date / Arrived on" al posto di vacancy e appointment
             c_vac = _col(intest, "vacancy")
+            if c_vac is None:
+                c_vac = _col(intest, "departed on", "exit date")
             c_app = _col(intest, "appointment")
+            if c_app is None:
+                c_app = _col(intest, "arrived on", "incoming date")
             c_mod = _col(intest, "manner", "departure")
             for r in g[inizio:]:
                 if len(r) <= max(c_team, c_out, c_in):
@@ -595,6 +605,21 @@ def partite_finestra(abbinatore, partite_db, giorni_prima=4, giorni_dopo=12):
     out, visti = [], set()
     stats = {(m["data"], m["casa"], m["ospite"]): m for m in partite_db
              if da - datetime.timedelta(days=2) <= m["data"] <= a}
+    import csv
+    import io
+    righe_fx = []
+    dati = scarica("https://football-data.co.uk/fixtures.csv", _cartella("calendari", "fixtures.csv"), max_ore=3)
+    if dati:
+        righe_fx = list(csv.DictReader(io.StringIO(dati.decode("utf-8-sig", errors="replace"))))
+    quote_fx = {}
+    for r in righe_fx:
+        lega = engine.LEGHE_FD.get((r.get("Div") or "").strip())
+        d = engine._parse_data(r.get("Date") or "")
+        q = engine.quote_riga(r)
+        if lega and d and q:
+            casa = engine.FD_RENAME.get(r["HomeTeam"].strip(), r["HomeTeam"].strip())
+            osp = engine.FD_RENAME.get(r["AwayTeam"].strip(), r["AwayTeam"].strip())
+            quote_fx[(d, abbinatore.trova(casa, lega) or casa, abbinatore.trova(osp, lega) or osp)] = q
 
     def aggiungi(comp, lega, t_utc, casa_raw, osp_raw, gc, go, giornata=None, gruppo=None):
         if lega:
@@ -620,9 +645,17 @@ def partite_finestra(abbinatore, partite_db, giorni_prima=4, giorni_dopo=12):
             f["gr"] = gruppo
         if gc is not None and go is not None:
             f["r"] = [gc, go]
+        # attese del mercato prima della partita (solo probabilita', mai le quote): file delle partite in arrivo
+        for dd in (d, d - datetime.timedelta(days=1), d + datetime.timedelta(days=1)):
+            q = quote_fx.get((dd, casa, osp))
+            if q:
+                f["q"] = q
+                break
         for dd in (d, d - datetime.timedelta(days=1), d + datetime.timedelta(days=1)):
             m = stats.get((dd, casa, osp))
             if m:
+                if m.get("q"):
+                    f["q"] = m["q"]          # partita giocata: le quote raccolte prima della partita
                 if gc is not None and go is not None:
                     CONTROLLO["risultati_confrontati"] += 1
                     if (int(gc), int(go)) != (m["gc"], m["go"]):
@@ -651,12 +684,9 @@ def partite_finestra(abbinatore, partite_db, giorni_prima=4, giorni_dopo=12):
                          r.get("HomeTeamScore"), r.get("AwayTeamScore"), r.get("RoundNumber"), r.get("Group"))
 
     # campionati senza calendario completo: partite della settimana + risultati recenti
-    import csv
-    import io
     coperte = set(LEGHE_CALENDARIO)
-    dati = scarica("https://football-data.co.uk/fixtures.csv", _cartella("calendari", "fixtures.csv"), max_ore=3)
-    if dati:
-        for r in csv.DictReader(io.StringIO(dati.decode("utf-8-sig", errors="replace"))):
+    if righe_fx:
+        for r in righe_fx:
             lega = engine.LEGHE_FD.get((r.get("Div") or "").strip())
             d = engine._parse_data(r.get("Date") or "")
             if not lega or lega in coperte or not d or not (da <= d <= a):
@@ -665,7 +695,7 @@ def partite_finestra(abbinatore, partite_db, giorni_prima=4, giorni_dopo=12):
             osp = engine.FD_RENAME.get(r["AwayTeam"].strip(), r["AwayTeam"].strip())
             aggiungi(lega, lega, ora_uk_a_utc(d, r.get("Time")), casa, osp, None, None)
     for m in partite_db:
-        if m["lega"] not in coperte and da <= m["data"] <= oggi:
+        if m["lega"] not in coperte and m["lega"] in engine.LEGHE_FD.values() and da <= m["data"] <= oggi:
             aggiungi(m["lega"], m["lega"], m["data"].isoformat() + "T15:00:00Z", m["casa"], m["ospite"], m["gc"], m["go"])
     out.sort(key=lambda f: (f["t"], f["comp"], f["c"]))
     return out

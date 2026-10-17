@@ -121,6 +121,10 @@ label.lb{display:block;font-size:12px;color:var(--mu);margin:10px 0 5px;font-wei
 .sig{display:flex;align-items:center;gap:6px;margin-top:9px;padding:7px 10px;border-radius:10px;background:var(--pick-d);
   border:1px solid rgba(245,181,68,.35);font-size:12.5px;color:#f7d79a}
 .sig b{color:#fff}
+.esp{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--mu)}
+.esp b{color:var(--tx)} .esp .ok{color:var(--win);font-weight:800;margin-left:auto} .esp .ko{color:var(--loss);font-weight:800;margin-left:auto}
+.riep{margin:0 0 12px;padding:11px 13px;border-radius:12px;background:var(--sf2);border:1px solid var(--line);font-size:13px;line-height:1.45}
+.riep b{color:var(--tx)}
 .sig .v{margin-left:auto;font-family:var(--disp);font-size:16px;font-weight:700;color:var(--pick)}
 .gauge{position:relative;height:10px;border-radius:6px;background:var(--sf3);overflow:hidden;margin:8px 0 6px}
 .gauge span{display:block;height:100%;border-radius:6px}
@@ -289,7 +293,7 @@ table.studio tbody tr{cursor:pointer}
 
   <section class="screen wrap" id="s-top" aria-label="Da guardare" hidden>
     <h1 class="h1">Partite da guardare</h1>
-    <p class="lead" id="top-lead">Stellina = uscita che resta probabile (almeno 65%) anche nell'ipotesi più prudente sui dati. Anche al 70% un'uscita sbaglia 3 volte su 10: nessuna è sicura.</p>
+    <p class="lead" id="top-lead">Stellina = un'uscita almeno al 65%, con dati non scarsi. Le percentuali sono verificate sul passato: al 70% un'uscita sbaglia comunque 3 volte su 10, nessuna è sicura.</p>
     <div id="comb-box"></div>
     <div class="days" id="days-top" role="toolbar" aria-label="Giorno"></div>
     <div id="top-list"></div>
@@ -365,7 +369,7 @@ const K_CAR = 40, CAP = {att: .15, dif: .05, corF: .22, corA: .31, cart: .07};  
 let D = null;                      // dati
 const STATO = {giorno: null, comp: "Tutte", lega: null, rank: "gol", allLega: "Tutti", vista: "all", arbLega: "Tutti", arbQ: "",
   legheVista: "cl", pv: "esito", num: "gol", per: "1", sqL: "Tutti", sqM: "esito", confL: "Serie A", soglia: 60,
-  comb: {giorno: null, vista: null, nEs: 5, k: 4, nCo: 5, cap: 100, fam: "tutti"}};
+  comb: {giorno: null, vista: null, nEs: 5, k: 4, nCo: 5, cap: 75, fam: "tutti"}};
 const CACHE = new Map();           // calcoli per partita
 
 /* ---------------- bandiere dei campionati (al posto degli stemmi finti e dei colori a caso) ---------------- */
@@ -438,6 +442,20 @@ function impostaAllenatore(team,coach){ const o=leggiOverride(), q=D.Q[team], uf
 function lega(team){ const q=D.Q[team]; return q&&q.l ? q.l : null; }
 function forza(team){ const l=lega(team); return l&&D.L[l]&&D.L[l].s ? D.L[l].s : 1; }
 
+/* forza di una squadra per il calcolo dei gol: dalle quote (le sue partite precedenti), oppure dalle coppe
+   europee per le squadre fuori dai campionati coperti, oppure dalla sola storia dei risultati */
+function forzaGol(team){ const q=D.Q[team], s=forza(team);
+  if(q.solo) return {a:q.solo[0],d:q.solo[1],tipo:"solo",n:q.solo[2]};
+  if(q.m) return {a:q.m[0]*s,d:q.m[1]/s,tipo:"quote",n:q.m[2]};
+  return {a:q.b[0]*s,d:q.b[1]/s,tipo:"storia",n:0}; }
+
+/* IL MOTORE. Le probabilità partono dalle attese del mercato delle scommesse (le quote, tolto il margine del
+   bookmaker: mai mostrate), perché sul passato indovinano più di qualsiasi nostro modello; poi sono corrette con
+   la verifica su decine di migliaia di partite. Tre casi:
+   q = la partita ha già le quote → gol attesi che le riproducono;
+   r = quote non ancora uscite (coppe, giornate lontane) → forza delle squadre imparata dalle quote delle loro partite precedenti;
+   m = squadra senza quote (vista solo in coppa) → storia dei risultati.
+   Da un'unica matrice dei risultati escono TUTTI i numeri sui gol e le simulazioni di angoli e cartellini. */
 function calcola(f, opt){
   opt=opt||{};
   const key=JSON.stringify([f.comp,f.c,f.o,opt]); if(CACHE.has(key)) return CACHE.get(key);
@@ -445,46 +463,46 @@ function calcola(f, opt){
   if(!qc||!qo){ const r={ok:false}; CACHE.set(key,r); return r; }
   const all_c = opt.allC!==undefined ? opt.allC : (qc.all||null);
   const all_o = opt.allO!==undefined ? opt.allO : (qo.all||null);
-  const st_c = opt.stC || stileDi(all_c), st_o = opt.stO || stileDi(all_o);
-  const pc=parametri(f.c,all_c,opt.assC), po=parametri(f.o,all_o,opt.assO);
+  const st_c = stileDi(all_c), st_o = stileDi(all_o);
+  const pc=parametri(f.c,all_c), po=parametri(f.o,all_o);       // servono ad angoli e cartellini
   const lc=lega(f.c), lo=lega(f.o), coppa=D.CUP[f.comp];
-  let lamC, lamO, rho, base, totL;
   const Lc=lc?D.L[lc]:null, Lo=lo?D.L[lo]:null;
-  const Ac = qc.solo ? pc.att : pc.att*forza(f.c), Dc = qc.solo ? pc.dif : pc.dif/forza(f.c);
-  const Ao = qo.solo ? po.att : po.att*forza(f.o), Do = qo.solo ? po.dif : po.dif/forza(f.o);
-  if(!coppa && lc && lc===lo && f.comp===lc){
-    lamC=Lc.gc*pc.att*po.dif; lamO=Lc.gt*po.att*pc.dif; rho=Lc.rho; base={tipo:"lega",L:Lc,nome:lc}; totL=Lc.gc+Lc.gt;
-  } else if(coppa){
-    lamC=coppa.B[0]*Ac*Do; lamO=coppa.B[1]*Ao*Dc; rho=coppa.rho; base={tipo:"coppa",L:coppa,nome:f.comp}; totL=coppa.tot||2.8;
+  const inLega = !coppa && lc && lc===lo && f.comp===lc;
+  let lamC, lamO, rho, base, totL, fonte;
+  if(inLega){ rho=Lc.rho; base={tipo:"lega",L:Lc,nome:lc}; totL=Lc.gc+Lc.gt; }
+  else if(coppa){ rho=coppa.rho; base={tipo:"coppa",L:coppa,nome:f.comp}; totL=coppa.tot||2.8; }
+  else { const L1=Lc||Lo, L2=Lo||Lc; rho=(L1.rho+L2.rho)/2; base={tipo:"misto",L:null,nome:(lc||"?")+" × "+(lo||"?")}; totL=(L1.gc+L1.gt+L2.gc+L2.gt)/2; }
+  const fc=forzaGol(f.c), fo=forzaGol(f.o);
+  if(f.q&&f.q.length>=6){ fonte="q"; lamC=f.q[4]; lamO=f.q[5]; }
+  else if(fc.tipo!=="storia"&&fo.tipo!=="storia"&&(fc.tipo==="quote"||fo.tipo==="quote")&&(!inLega||Lc.m)){
+    fonte="r";
+    if(inLega){ lamC=Lc.m[0]*fc.a*fo.d; lamO=Lc.m[1]*fo.a*fc.d; }
+    else if(coppa){ const Bq=coppa.Bq||coppa.B; lamC=Bq[0]*fc.a*fo.d; lamO=Bq[1]*fo.a*fc.d; }   // livello di gol della coppa misurato con la forza dalle quote
+    else { const m1=(Lc&&Lc.m)||(Lo&&Lo.m)||[Lc.gc,Lc.gt], m2=(Lo&&Lo.m)||m1; lamC=(m1[0]+m2[0])/2*fc.a*fo.d; lamO=(m1[1]+m2[1])/2*fo.a*fc.d; }
   } else {
-    const L1=Lc||Lo, L2=Lo||Lc; lamC=(L1.gc+L2.gc)/2*Ac*Do; lamO=(L1.gt+L2.gt)/2*Ao*Dc; rho=(L1.rho+L2.rho)/2; base={tipo:"misto",L:null,nome:(lc||"?")+" × "+(lo||"?")}; totL=(L1.gc+L1.gt+L2.gc+L2.gt)/2;
+    fonte="m";
+    if(inLega){ lamC=Lc.gc*fc.a*fo.d; lamO=Lc.gt*fo.a*fc.d; }
+    else if(coppa){ lamC=coppa.B[0]*fc.a*fo.d; lamO=coppa.B[1]*fo.a*fc.d; }
+    else { const L1=Lc||Lo, L2=Lo||Lc; lamC=(L1.gc+L2.gc)/2*fc.a*fo.d; lamO=(L1.gt+L2.gt)/2*fo.a*fc.d; }
+    [lamC,lamO]=smorza(lamC,lamO,totL);            // la storia dei soli risultati esagera: si smorza come misurato sul passato
   }
-  const at=attrito(st_c,st_o);
-  lamC*=at.gol*at.bC; lamO*=at.gol*at.bO;
-  // precedenti: incidono poco e solo se sono tanti e recenti
-  const prec=precedenti(f.c,f.o); let h2h=null;
-  if(prec.length>=3){ let w=0,o=0,e=0; const now=Date.now();
-    for(const x of prec){ const anni=(now-Date.parse(x[0]))/3.156e10, ww=Math.pow(.8,anni); w+=ww; o+=ww*(x[4]+x[5]); e+=ww*(lamC+lamO); }
-    const r=o/e, peso=Math.min(.25,(w/(w+8))*.35), fat=clamp(1+peso*(r-1),.88,1.12);
-    lamC*=fat; lamO*=fat; h2h={n:prec.length,media:o/w,attesi:e/w,peso:peso,fat:fat}; }
-  // smorzamento del totale gol misurato sul passato (il modello grezzo esagera le partite "da tanti" o "da pochi" gol)
-  const grezzi={lamC,lamO,totL};
-  [lamC,lamO]=smorza(lamC,lamO,totL);
-  lamC=clamp(lamC,.12,4.6); lamO=clamp(lamO,.12,4.6);
-  // UN SOLO CERVELLO: la matrice dei risultati viene allineata alle probabilità verificate sul passato
-  // (Over 2.5 e Gol/Gol), tenendo fermo l'1X2 che è già preciso. Da questa matrice escono TUTTI i numeri
-  // sui gol (risultati esatti, linee Over/Under, fasce, multigol, gol attesi) e le simulazioni di angoli e cartellini.
-  const P0=matrice(lamC,lamO,rho), o25raw=probMercato(P0,"O25"), ggraw=probMercato(P0,"GG");
-  const raw1x2=["1","X","2"].map(k=>probMercato(P0,k));
-  const P=allinea(P0,p1x2(raw1x2),calib("O25",o25raw),calib("GG",ggraw));
+  lamC=clamp(lamC,.08,6); lamO=clamp(lamO,.08,6);
+  // UN SOLO CERVELLO: la matrice dei risultati viene allineata alle probabilità corrette con la verifica sul passato
+  // (1X2, Over 2.5, Gol/Gol): da qui escono risultati esatti, linee, fasce, multigol, gol attesi, angoli e cartellini.
+  const cur = fonte==="q" ? D.V.q.curve : (fonte==="r" ? D.V.r.curve : D.V.curve);
+  const P0=matrice(lamC,lamO,rho), ggraw=probMercato(P0,"GG");
+  const raw1x2 = fonte==="q" ? [f.q[0],f.q[1],f.q[2]] : ["1","X","2"].map(k=>probMercato(P0,k));
+  const o25raw = fonte==="q" ? f.q[3] : probMercato(P0,"O25");
+  const P=allinea(P0,p1x2(raw1x2,cur),calib("O25",o25raw,cur),calib("GG",ggraw,cur));
   let p1=0,px=0,p2=0,gg=0,mC=0,mO=0; const ov={}, celle=[];
   for(let i=0;i<11;i++) for(let j=0;j<11;j++){ const v=P[i][j]; if(i>j)p1+=v; else if(i===j)px+=v; else p2+=v;
     if(i>0&&j>0) gg+=v; mC+=i*v; mO+=j*v; celle.push([i,j,v]); for(const L of [.5,1.5,2.5,3.5,4.5]) if(i+j>L) ov[L]=(ov[L]||0)+v; }
   celle.sort((a,b)=>b[2]-a[2]);
   // angoli e cartellini: medie di lega casa/trasferta
+  const at=attrito(st_c,st_o);
   const Vs=[Lc,Lo].filter(Boolean); const vm=k=>Vs.length?Vs.reduce((a,L)=>a+L[k],0)/Vs.length:D.DEF[k];
   const corC0=vm("vcc"), corO0=vm("vco"), carC0=vm("vkc"), carO0=vm("vko");
-  const dom=clamp(Math.pow(lamC/Math.max(lamO,.1),.15),.88,1.15);
+  const dom=clamp(Math.pow(mC/Math.max(mO,.1),.15),.88,1.15);
   const muCC=corC0*pc.corF*po.corA*at.corC*dom, muCO=corO0*po.corF*pc.corA*at.corO/dom;
   const der=derby(f.c,f.o), boost=der?der[1]:1;
   const aggr=x=>1+.5*(clamp(x,.7,1.4)-1);
@@ -499,14 +517,17 @@ function calcola(f, opt){
   if(tc&&to&&tc.t&&to.t&&Lc&&Lo&&Lc.x.t&&Lo.x.t){ const mt=(Lc.x.t+Lo.x.t)/4, mp=(Lc.x.p+Lo.x.p)/4;
     const ft=((Lc.x.ft||1)+(Lo.x.ft||1))/2, fp=((Lc.x.fp||1)+(Lo.x.fp||1))/2;   // livello della stagione in corso
     tiri={c:tc.t*to.ts/mt*ft, o:to.t*tc.ts/mt*ft, pc:tc.p*to.ps/mp*fp, po:to.p*tc.ps/mp*fp}; }
+  // precedenti: solo informazione (le attese del mercato li contengono già)
+  const prec=precedenti(f.c,f.o), h2h=prec.length?{n:prec.length,media:prec.reduce((a,x)=>a+x[4]+x[5],0)/prec.length}:null;
   const stimati = !!(qc.solo||qo.solo||qc.cs||qo.cs);
-  const r={ok:true,mc:false,key,f,lamC:mC,lamO:mO,lamRaw:[lamC,lamO],o25raw,ggraw,p1raw:raw1x2[0],pxraw:raw1x2[1],p2raw:raw1x2[2],rho,P,p1,px,p2,gg,ov,celle,base,at,st_c,st_o,all_c,all_o,pc,po,
-    muCC,muCO,muKC,muKO,kf,der,h2h,tiri,stimati,opt,grezzi,arb:arb?{nome:f.ar,f:fArb}:null};
+  const r={ok:true,mc:false,key,f,fonte,fc,fo,lamC:mC,lamO:mO,rho,P,p1,px,p2,gg,ov,celle,base,at,st_c,st_o,all_c,all_o,pc,po,
+    muCC,muCO,muKC,muKO,kf,der,h2h,tiri,stimati,opt,arb:arb?{nome:f.ar,f:fArb}:null};
   r.o25=ov[2.5]; r.ggc=gg;       // già allineate: sono le stesse della matrice
+  r.dati=datiPartita(r);
   CACHE.set(key,r); return r; }
 
 /* 1, X, 2 corretti con la verifica sul passato e riportati a somma 1 */
-function p1x2(raw){ const v=["1","X","2"].map((k,i)=>calib(k,raw[i])), t=v[0]+v[1]+v[2]; return t>0?v.map(x=>x/t):raw; }
+function p1x2(raw,cur){ const v=["1","X","2"].map((k,i)=>calib(k,raw[i],cur)), t=v[0]+v[1]+v[2]; return t>0?v.map(x=>x/t):raw; }
 /* allineamento della matrice (raking): si ritoccano a turno le celle perché 1X2, Over 2.5 e Gol/Gol
    tornino uguali ai valori voluti; in poche passate tutti e tre coincidono */
 function allinea(P0,t1x2,tO,tG){
@@ -523,7 +544,7 @@ function allinea(P0,t1x2,tO,tG){
 /* smorzamento: totale gol riportato verso la media della competizione, rapporto tra le squadre invariato */
 function smorza(lc,lo,totL){ const g=D.V?D.V.gamma:1, t=lc+lo; if(!(t>0)||!(totL>0)) return [lc,lo]; const n=totL*Math.pow(t/totL,g); return [lc*n/t,lo*n/t]; }
 /* correzione dalla verifica storica: probabilità del modello → frequenza reale */
-function calib(k,p){ const c=D.V&&D.V.curve&&D.V.curve[k]; if(!c||!c.length) return p;
+function calib(k,p,cur){ const c=(cur||(D.V&&D.V.curve)||{})[k]; if(!c||!c.length) return p;
   if(p<=c[0][0]) return clamp(p+(c[0][1]-c[0][0]),.01,.99);
   for(let i=1;i<c.length;i++) if(p<=c[i][0]){ const a=c[i-1], b=c[i], t=(p-a[0])/(b[0]-a[0]); return a[1]+t*(b[1]-a[1]); }
   const z=c[c.length-1]; return clamp(p+(z[1]-z[0]),.01,.99); }
@@ -533,48 +554,41 @@ function probMercato(P,k){ let v=0; for(let i=0;i<11;i++) for(let j=0;j<11;j++){
 /* uscita principale: la più probabile tra esito, under/over 2.5 e gol/no gol (probabilità già verificate sul passato) */
 function principale(r){
   const c=r.f.c, o=r.f.o, m=[
-    ["1","Vince "+c,r.p1,r.p1raw],["X","Pareggio",r.px,r.pxraw],["2","Vince "+o,r.p2,r.p2raw],
-    ["O25","Over 2.5 gol",r.o25,r.o25raw],["U25","Under 2.5 gol",1-r.o25,1-r.o25raw],
-    ["GG","Gol/Gol (segnano entrambe)",r.ggc,r.ggraw],["NG","No Gol (almeno una non segna)",1-r.ggc,1-r.ggraw]];
-  m.sort((a,b)=>b[2]-a[2]); const x=m[0]; return {key:x[0],lab:x[1],p:x[2],praw:x[3]}; }
+    ["1","Vince "+c,r.p1],["X","Pareggio",r.px],["2","Vince "+o,r.p2],
+    ["O25","Over 2.5 gol",r.o25],["U25","Under 2.5 gol",1-r.o25],
+    ["GG","Gol/Gol (segnano entrambe)",r.ggc],["NG","No Gol (almeno una non segna)",1-r.ggc]];
+  m.sort((a,b)=>b[2]-a[2]); const x=m[0]; return {key:x[0],lab:x[1],p:x[2]}; }
 
-/* AFFIDABILITÀ: probabilità dell'uscita principale meno il margine d'incertezza di QUESTA partita.
-   Il margine nasce da quanto poco sappiamo delle due squadre oggi (inizio stagione, allenatore nuovo,
-   squadre viste solo in coppa): 400 scenari plausibili dei loro valori, si prende il 10% più sfavorevole. */
+/* DATI della partita: su cosa poggia il numero.
+   solidi = la partita ha le quote, oppure le due squadre hanno già molte partite nel campionato;
+   medi = coppa europea (campionati diversi) o squadra con poche partite nel campionato;
+   scarsi = una squadra vista solo in coppa o senza quote nell'archivio. */
 const SOGLIA_ALTA=.65, SOGLIA_MEDIA=.55;
-function incertezza(team,coach){
-  const q=D.Q[team], V=D.V, mot=[];
-  if(q.solo){ const n=q.solo[2]+4; mot.push(team+": visto solo in "+q.solo[2]+" partite europee");
-    return {a:Math.sqrt(V.cv_att*V.cv_att/n+V.tau_att*V.tau_att),d:Math.sqrt(V.cv_dif*V.cv_dif/n+V.tau_dif*V.tau_dif),mot}; }
-  const neff=(q.u&&q.u[0])||30, nst=(q.u&&q.u[1])||0;
-  const ufficiale_=coach&&coach===ufficiale(q), nqui=ufficiale_&&q.sp?q.sp.n_qui:0;
-  const nrec=nst+.3*Math.min(nqui,114), w=nrec/(nrec+20);
-  if(!coach) mot.push(team+": allenatore non noto");
-  else if(nqui<15) mot.push(coach+" ("+team+") in panchina da "+nqui+" partite");
-  else if(nqui>=114) mot.push(coach+" ("+team+") in panchina da oltre 3 stagioni: squadra stabile, margine più basso");
-  return {nst,a:Math.sqrt(V.cv_att*V.cv_att/neff+V.tau_att*V.tau_att*(1-w)),d:Math.sqrt(V.cv_dif*V.cv_dif/neff+V.tau_dif*V.tau_dif*(1-w)),mot}; }
+function datiPartita(r){
+  const f=r.f, mot=[];
+  for(const [t,x] of [[f.c,r.fc],[f.o,r.fo]]){
+    if(x.tipo==="solo") mot.push(t+": vista solo in "+x.n+" partite europee");
+    else if(x.tipo==="storia") mot.push(t+": nessuna quota nell'archivio");
+    else if(r.fonte!=="q"&&x.n<8) mot.push(t+": solo "+x.n+" partite nel campionato");
+  }
+  if(r.fonte==="q") return {t:"solidi",c:"var(--win)",mot:[]};
+  if(r.fonte==="m"||r.fc.tipo==="solo"||r.fo.tipo==="solo") return {t:"scarsi",c:"var(--loss)",mot};
+  if(r.base.tipo!=="lega") mot.unshift("coppa europea: campionati diversi a confronto");
+  return mot.length?{t:"medi",c:"var(--pick)",mot}:{t:"solidi",c:"var(--win)",mot}; }
+/* uscita principale + livello: la stellina va alle partite con un'uscita almeno al 65% e dati non scarsi */
 function affid(r){
   if(r.af) return r.af;
-  const pr=principale(r), uc=incertezza(r.f.c,r.all_c), uo=incertezza(r.f.o,r.all_o), R=rng(hash(r.key+"|aff")), N=400, v=[];
-  for(let n=0;n<N;n++){
-    const aC=Math.exp(rNorm(R)*uc.a), dC=Math.exp(rNorm(R)*uc.d), aO=Math.exp(rNorm(R)*uo.a), dO=Math.exp(rNorm(R)*uo.d);
-    let [lc,lo]=smorza(r.grezzi.lamC*aC*dO,r.grezzi.lamO*aO*dC,r.grezzi.totL);
-    v.push(probMercato(matrice(clamp(lc,.12,4.6),clamp(lo,.12,4.6),r.rho),pr.key)); }
-  v.sort((a,b)=>a-b); const p10=v[Math.floor(.1*N)], margine=Math.max(0,pr.praw-p10);
-  const val=clamp(pr.p-margine,0,1), liv=val>=SOGLIA_ALTA?"alta":(val>=SOGLIA_MEDIA?"media":"bassa");
-  const motivi=[];
-  const nst=Math.min(uc.nst==null?99:uc.nst,uo.nst==null?99:uo.nst);
-  if(nst<10) motivi.push("inizio stagione: "+nst+" partite di campionato giocate");
-  motivi.push(...uc.mot,...uo.mot);
-  return (r.af={val,liv,pr,margine,motivi}); }
-/* qualità dei dati su cui poggia il pronostico (dal margine d'incertezza della partita) */
-function qualita(a){ const m=a.margine; return m<.05?{t:"solidi",c:"var(--win)"}:(m<.10?{t:"medi",c:"var(--pick)"}:{t:"scarsi",c:"var(--loss)"}); }
-function motiviBrevi(a){ return a.motivi.filter(x=>!/squadra stabile/.test(x)).slice(0,2); }
+  const pr=principale(r), val=pr.p, d=r.dati;
+  const liv=val>=SOGLIA_ALTA&&d.t!=="scarsi"?"alta":(val>=SOGLIA_MEDIA?"media":"bassa");
+  return (r.af={val,liv,pr,margine:0,motivi:d.mot,dati:d}); }
+function qualita(a){ return a.dati; }
+function motiviBrevi(a){ return a.motivi.slice(0,2); }
 const SIGLA_M={"1":"1","X":"X","2":"2","O25":"O 2.5","U25":"U 2.5","GG":"GG","NG":"NG"};
 function fasceGol(P){ const f=[0,0,0,0,0,0]; for(let i=0;i<11;i++) for(let j=0;j<11;j++) f[Math.min(i+j,5)]+=P[i][j]; return f; }
-function notaEsatti(){ return D.V&&D.V.esatto3?'<p class="note">Il risultato esatto è il pronostico più difficile: i 3 più probabili insieme escono circa '+Math.round(100*D.V.esatto3)+' volte su 100.</p>':""; }
-function verificaStorica(pr){ const t=D.V&&D.V.tab&&D.V.tab[pr.key]; if(!t) return null;
-  for(const x of t) if(pr.praw>=x[0]&&pr.praw<x[0]+.05) return {da:x[0],a:x[0]+.05,n:x[1],fr:x[2]}; return null; }
+function notaEsatti(){ const q=D.V&&D.V.q; return q&&q.esatto3?'<p class="note">Il risultato esatto è il pronostico più difficile: su '+q.n.toLocaleString("it-IT")+' partite passate il più probabile è uscito '+Math.round(100*q.esatto1)+' volte su 100, i 3 più probabili insieme '+Math.round(100*q.esatto3)+' volte su 100. Nessuno fa meglio: anche per chi fa le quote 1-1, 1-0 e 2-1 sono quasi sempre i risultati più probabili.</p>':""; }
+/* verifica sul passato della stessa fonte: quando diceva questa percentuale, quante volte è uscito davvero */
+function verificaStorica(r,pr){ const v=D.V&&D.V[r.fonte==="m"?"r":r.fonte], t=v&&v.tab&&v.tab[pr.key]; if(!t) return null;
+  for(const x of t) if(pr.p>=x[0]&&pr.p<x[0]+.05) return {da:x[0],a:x[0]+.05,n:x[1],fr:x[2]}; return null; }
 
 /* 10.000 simulazioni (riproducibili) per angoli e cartellini, correlate al punteggio */
 function conMC(r){
@@ -597,7 +611,7 @@ function precedenti(a,b){ return D.H[[a,b].sort().join("|")]||[]; }
 
 function lineaMed(L){ let best=L[0]; for(const x of L) if(Math.abs(x[1]-.5)<Math.abs(best[1]-.5)) best=x; return best; }
 function uscite(r){
-  // stessi mercati e stesso ordine dell'uscita principale (affidabilità e stellina): la prima coincide sempre.
+  // stessi mercati e stesso ordine dell'uscita principale (pronostico e stellina): la prima coincide sempre.
   // Angoli e cartellini hanno le loro linee nelle schede dedicate.
   const c=r.f.c, o=r.f.o, out=[
     ["1 · vince "+c,r.p1,"esito"],["X · pareggio",r.px,"esito"],["2 · vince "+o,r.p2,"esito"],
@@ -645,7 +659,7 @@ function apriSblocco(esito){
       '<div class="row" style="margin-top:14px"><button class="btn ghost grow" id="sb-esci">Disattiva su questo telefono</button><button class="btn grow" id="sb-chiudi">Chiudi</button></div>';
   } else {
     c.innerHTML='<h2>Sblocca la versione completa</h2>'+(esito==="ko"?'<p class="msg-ko">Il link contiene un codice non valido o non più attivo.</p>':"")+
-      '<ul><li>Affidabilità di ogni partita e stelline "Da guardare"</li><li>Le uscite più probabili e il perché, con i numeri</li><li>Schede Gol, Angoli, Cartellini e Tiri</li><li>Analisi degli allenatori e Simula</li></ul>'+
+      '<ul><li>Il pronostico di ogni partita e le stelline "Da guardare"</li><li>Le uscite più probabili e il perché, con i numeri</li><li>Schede Gol, Angoli, Cartellini e Tiri</li><li>Analisi degli allenatori e Simula</li></ul>'+
       '<label class="lb" for="sb-codice">Hai un codice?</label><input type="text" id="sb-codice" placeholder="ORCL-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">'+
       '<div id="sb-msg"></div>'+
       '<div class="row" style="margin-top:12px"><button class="btn ghost grow" id="sb-chiudi">Chiudi</button><button class="btn grow" id="sb-ok">Sblocca</button></div>'+
@@ -666,7 +680,7 @@ function vetrine(){
   const n=(D.V&&D.V.n?D.V.n:30000).toLocaleString("it-IT"), all=(D.meta&&D.meta.allenatori||1000).toLocaleString("it-IT");
   return {
     pron:["Il pronostico completo di questa partita","Non solo le percentuali: quanto fidarsi e perché.",
-      ["L'affidabilità in % di questa partita, verificata su "+n+" partite passate","Le 3 uscite più probabili, con la percentuale di ognuna","I risultati esatti più probabili e quanti gol aspettarsi","Perché il modello la vede così e quanto pesa ogni dato"]],
+      ["La probabilità dell'uscita indicata, verificata su "+n+" partite passate","Le 3 uscite più probabili, con la percentuale di ognuna","I risultati esatti più probabili e quanti gol aspettarsi","Perché i numeri la vedono così e da dove nasce la percentuale"]],
     gol:["Scheda Gol completa","Tutti i numeri sui gol di questa partita.",
       ["I 9 risultati esatti più probabili","Over/Under da 0.5 a 4.5 gol, Gol/Gol e No Gol","Multigol della partita, della squadra di casa e di quella ospite","Gol attesi per squadra ed expected goals (xG) della stagione"]],
     comb:["Le combinazioni","Il sistema sceglie da solo partite e pronostici, in ordine di probabilità.",
@@ -680,18 +694,18 @@ function vetrine(){
     tiri:["Scheda Tiri completa","Chi tirerà di più e quanto arriverà in porta.",
       ["Tiri attesi per ciascuna squadra","Tiri in porta attesi per ciascuna squadra","Tiri fatti e concessi in media dalle due squadre"]],
     all:["Analisi degli allenatori","I numeri veri degli ultimi 10 anni di chi va in panchina.",
-      ["Vittorie, gol fatti e subiti, Over 2.5 e Gol/Gol di ogni allenatore","Angoli e cartellini delle sue squadre","Quanto pesa l'allenatore in questo pronostico, in base alle partite in panchina","Lo stile di gioco e lo scontro di stili"]],
+      ["Vittorie, gol fatti e subiti, Over 2.5 e Gol/Gol di ogni allenatore","Angoli e cartellini delle sue squadre","Il rendimento nella squadra attuale e in coppa europea","Carriera di 10 anni: Serie A e B e gli altri campionati coperti"]],
     carriera:["Numeri dell'allenatore","10 anni di carriera, squadra per squadra.",
       ["Vittorie, pareggi e sconfitte in %","Gol fatti e subiti, Over 2.5 e Gol/Gol a partita","Angoli e cartellini delle sue squadre","Il rendimento in ogni squadra allenata e in coppa europea"]],
-    dati:["Cosa dicono i dati, campionato per campionato","Su quali pronostici il modello è più solido in ogni campionato.",
-      ["Il pronostico più affidabile di ogni campionato, con la percentuale reale","Come cambia quando il modello è sicuro al 55, 60, 65 o 70%","Il risultato esatto e i mercati più imprevedibili, da guardare con cautela","Le tendenze: cosa sta cambiando nell'ultimo anno"]],
-    prev:["Le squadre che rispettano i pronostici","Con chi il modello ci prende di più, e con chi sbaglia.",
+    dati:["Cosa dicono i dati, campionato per campionato","Su quali pronostici i numeri sono più solidi in ogni campionato.",
+      ["Il pronostico più affidabile di ogni campionato, con la percentuale reale","Come cambia quando il pronostico è al 55, 60, 65 o 70%","Il risultato esatto e i mercati più imprevedibili, da guardare con cautela","Le tendenze: cosa sta cambiando nell'ultimo anno"]],
+    prev:["Le squadre che rispettano i pronostici","Con chi i pronostici ci prendono di più, e con chi sbagliano.",
       ["Le squadre più prevedibili su 1X2, Over/Under, Gol/No Gol e risultato esatto","Chi segna più gol del previsto e chi ne subisce meno","Filtro per campionato, ultime 3 stagioni"]],
     rank:["Classifica del giorno","Le partite del giorno ordinate per numeri.",
       ["Le partite con più gol attesi","Le partite con più angoli, cartellini o tiri attesi"]],
     guarda:["Le partite da guardare, con l'uscita","Qui vedi quali partite hanno la stellina: con la versione completa vedi quale uscita indicano e perché.",
-      ["L'uscita indicata per ogni partita con la stellina","L'affidabilità in % e i motivi","Le statistiche complete di ogni partita"]],
-    tutto:["Versione completa","Sblocca tutte le analisi.",["Affidabilità, uscite e analisi di ogni partita"]],
+      ["L'uscita indicata per ogni partita con la stellina","La probabilità in % e i motivi","Le statistiche complete di ogni partita"]],
+    tutto:["Versione completa","Sblocca tutte le analisi.",["Pronostico, uscite e analisi di ogni partita"]],
   };
 }
 function vetrina(chiave){
@@ -789,7 +803,7 @@ function schermoPartite(){
     $("lista").innerHTML='<div class="empty"><b>Nessuna partita in questo giorno</b>nei campionati e nelle coppe coperti.'+(prossimo?'<div style="margin-top:14px"><button class="btn ghost" id="vai-pross">Vai alle partite di '+esc(dataLunga(prossimo+"T12:00:00"))+'</button></div>':"")+'</div>';
     const b=$("vai-pross"); if(b) b.onclick=()=>{ STATO.giorno=prossimo; schermoPartite(); }; return; }
   const gruppi={}; lst.forEach(f=>(gruppi[f.comp]=gruppi[f.comp]||[]).push(f));
-  $("lista").innerHTML=ordineComp(new Set(Object.keys(gruppi))).map(c=>'<div class="grp"><div class="grp-h">'+bandiera(c)+''+esc(nomeComp(c))+'<span class="muted">· '+gruppi[c].length+'</span></div>'+gruppi[c].map(f=>cardPartita(f)).join("")+'</div>').join("");
+  $("lista").innerHTML=riepilogoGiorno(lst)+ordineComp(new Set(Object.keys(gruppi))).map(c=>'<div class="grp"><div class="grp-h">'+bandiera(c)+''+esc(nomeComp(c))+'<span class="muted">· '+gruppi[c].length+'</span></div>'+gruppi[c].map(f=>cardPartita(f)).join("")+'</div>').join("");
   $("lista").querySelectorAll(".match").forEach(b=>b.addEventListener("click",()=>vai("#m/"+b.dataset.i)));
   adattaNomi($("lista"));
   const giorno=STATO.giorno;
@@ -801,6 +815,14 @@ function schermoPartite(){
         card.querySelector(".sig-slot").innerHTML=ACC.premium?'<div class="sig">★ Da guardare · <b>'+esc(a.pr.lab)+'</b><span class="v num">'+pct(a.pr.p)+'</span></div>'
           :'<div class="sig">★ Da guardare · <b>••••••••••</b><span class="v">'+LUCC+'</span></div>'; } } });
 }
+/* COM'È ANDATA: sulle partite giocate di un giorno, quante volte è uscito il pronostico fatto prima della partita */
+function riepilogoGiorno(lst){
+  let n=0, ok=0, att=0, ex=0;
+  for(const f of lst){ if(!f.r||!f.q) continue; const r=calcola(f); if(!r.ok||r.fonte!=="q") continue; const a=affid(r);
+    n++; att+=a.pr.p; ok+=USCITO[a.pr.key](f.r[0],f.r[1]); ex+=(r.celle[0][0]===f.r[0]&&r.celle[0][1]===f.r[1]); }
+  if(n<3) return "";
+  return '<div class="riep"><b>Com\'è andata</b> · su '+n+' partite giocate il pronostico è uscito <b>'+ok+' volte ('+pct(ok/n)+')</b>; ci aspettavamo il '+pct(att/n)+'. '+
+    'Risultato esatto più probabile: '+ex+' su '+n+' (di solito 1 su 8).</div>'; }
 /* rimpicciolisce i nomi con parole troppo lunghe per la colonna (es. "Bournemouth") */
 function adattaNomi(root){
   root.querySelectorAll(".team .nm, .hero .t .nm").forEach(el=>{
@@ -817,6 +839,8 @@ function cardPartita(f){
   if(r.ok) bar='<div class="bar3"><span style="width:'+pct(r.p1,1)+';background:var(--c1)"></span><span style="width:'+pct(r.px,1)+';background:var(--cx)"></span><span style="width:'+pct(r.p2,1)+';background:var(--c2)"></span></div>'+
     '<div class="bar3-l num"><span>1 <b>'+pct(r.p1)+'</b></span><span>X <b>'+pct(r.px)+'</b></span><span>2 <b>'+pct(r.p2)+'</b></span></div><div class="sig-slot"></div>';
   else bar='<div class="bar3-l"><span>Squadra fuori dal database: niente pronostico</span></div>';
+  if(f.r&&r.ok&&r.fonte==="q"){ const a=affid(r), ok=USCITO[a.pr.key](f.r[0],f.r[1]);
+    bar+='<div class="esp">Pronostico '+(ACC.premium?'<b>'+SIGLA_M[a.pr.key]+' · '+pct(a.pr.p)+'</b>':LUCC)+'<span class="'+(ok?"ok":"ko")+'">'+(ok?"✓ uscito":"✗ non uscito")+'</span></div>'; }
   return '<button class="match" data-i="'+f.i+'">'+(PREF.has(chiaveP(f))?'<span class="pref-i" title="Nelle preferite">'+segna(true)+'</span>':'')+'<div class="mrow"><div class="team">'+'<span class="nm">'+esc(f.c)+'</span></div><div class="mid">'+mid+'</div><div class="team r">'+'<span class="nm">'+esc(f.o)+'</span></div></div>'+bar+'</button>'; }
 
 /* ---------------- TOP 3 ---------------- */
@@ -848,7 +872,7 @@ function schermoTop(){
       :'<div class="sig"><span>'+(a.liv==="alta"?"★ ":"")+'<b>••••••••••</b></span><span class="v">'+LUCC+'</span></div>')+'</button>'; };
   $("top-list").innerHTML = (ACC.premium?"":'<div style="margin-bottom:12px">'+vetrina("guarda")+'</div>')+
     (t.alte.length ? t.alte.map(scheda).join("")
-    : '<div class="empty"><b>Nessuna partita con la stellina</b>In questo giorno nessuna uscita resta al 65% anche nell\'ipotesi più prudente sui dati. Meglio nessun consiglio che uno debole.</div>')+
+    : '<div class="empty"><b>Nessuna partita con la stellina</b>In questo giorno nessuna uscita arriva al 65% con dati non scarsi. Meglio nessun consiglio che uno debole.</div>')+
     (t.medie.length?'<div class="sec">Da tenere d\'occhio</div>'+t.medie.slice(0,6).map(scheda).join(""):"");
   $("top-list").querySelectorAll(".match").forEach(b=>b.addEventListener("click",()=>vai("#m/"+b.dataset.i)));
   const RK=[["gol","Più gol"],["pochi","Meno gol"],["angoli","Più angoli"],["cart","Più cartellini"],["tiri","Più tiri"]];
@@ -934,15 +958,17 @@ function kp(k,v,lg,fmt,dir){ const d=lg==null?null:(v-lg)/Math.max(lg,1e-9);
 function disegnaTab(f,opt){
   const r=conMC(calcola(f,opt)), p=$("pane"), b=r.base.L||{}, Lx=(D.L[lega(f.c)]||{}).x||{};
   if(TAB==="pron"){
-    const a=affid(r), vs=verificaStorica(a.pr), col=a.liv==="alta"?"var(--pick)":(a.liv==="media"?"var(--ac)":"var(--mu2)");
+    const a=affid(r), vs=verificaStorica(r,a.pr), col=a.liv==="alta"?"var(--pick)":(a.liv==="media"?"var(--ac)":"var(--mu2)");
+    const fine=f.r&&r.fonte==="q"?(USCITO[a.pr.key](f.r[0],f.r[1])?'<p class="small" style="margin:8px 0 0;color:var(--win)"><b>✓ Uscito</b> · finita '+f.r[0]+'-'+f.r[1]+'</p>':'<p class="small" style="margin:8px 0 0;color:var(--loss)"><b>✗ Non uscito</b> · finita '+f.r[0]+'-'+f.r[1]+'</p>'):"";
     const q=qualita(a), mot=motiviBrevi(a);
     const aff='<div class="card" style="margin-top:8px;border-color:'+(a.liv==="alta"?"rgba(245,181,68,.45)":"var(--line)")+'">'+
       '<div class="tiny muted" style="font-weight:700;letter-spacing:1px;text-transform:uppercase">Il pronostico'+(a.liv==="alta"?' <span style="color:var(--pick)">· ★ Da guardare</span>':'')+'</div>'+
       '<div class="row" style="margin-top:4px;align-items:flex-end"><b class="grow seg" style="font-size:17px;line-height:1.25">'+esc(a.pr.lab)+'</b><span class="affv num" style="color:'+col+'">'+pct(a.pr.p)+'</span></div>'+
       '<div class="gauge"><span style="width:'+pct(a.pr.p,1)+';background:'+col+'"></span></div>'+
-      '<p class="small" style="margin:8px 0 0">Dati: <b style="color:'+q.c+'">'+q.t+'</b>'+(q.t!=="solidi"&&mot.length?' <span class="muted">· '+mot.map(esc).join(" · ")+'</span>':'')+'</p>'+
+      '<p class="small" style="margin:8px 0 0">Dati: <b style="color:'+q.c+'">'+q.t+'</b>'+(q.t!=="solidi"&&mot.length?' <span class="muted">· '+mot.map(esc).join(" · ")+'</span>':'')+'</p>'+fine+
+      (vs?'<p class="note" style="margin-top:6px">Sul passato, quando il pronostico diceva '+Math.round(100*vs.da)+'–'+Math.round(100*vs.a)+'%, è uscito il <b>'+n2(100*vs.fr,0)+'%</b> delle volte ('+vs.n.toLocaleString("it-IT")+' partite).</p>':'')+
       '<div class="sec" style="margin-top:12px">Risultati più probabili</div><div class="scores">'+r.celle.slice(0,3).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>'+
-      '<p class="note">Ogni risultato esatto da solo è poco probabile: conta di più quanti gol si aspettano. Con 3 o più gol: <b>'+pct(r.o25)+'</b>.</p>'+
+      '<p class="note">Ogni risultato esatto da solo è poco probabile (anche il primo esce circa 1 volta su 8): conta di più quanti gol si aspettano. Con 3 o più gol: <b>'+pct(r.o25)+'</b>.</p>'+
       barreFasce(r)+'</div>';
     const uno='<div class="card" style="margin-top:10px"><div class="big3-l num"><span>'+esc(f.c)+'<b>'+pct(r.p1)+'</b></span><span class="x">Pareggio<b>'+pct(r.px)+'</b></span><span class="a">'+esc(f.o)+'<b>'+pct(r.p2)+'</b></span></div>'+
       '<div class="big3"><span style="width:'+pct(r.p1,1)+';background:var(--c1)"></span><span style="width:'+pct(r.px,1)+';background:var(--cx)"></span><span style="width:'+pct(r.p2,1)+';background:var(--c2)"></span></div>'+
@@ -957,7 +983,7 @@ function disegnaTab(f,opt){
       '<p class="note">Il colore indica uno scarto di oltre il 10% dalla media '+(r.base.tipo==="coppa"?"della competizione":"del campionato")+'.</p>';
     const reali=f.st?'<div class="sec">Statistiche reali della partita</div><div class="card">'+statReali(f)+'</div>':"";
     let resto='<div class="sec">Perché «<span class="seg">'+esc(a.pr.lab)+'</span>»</div><div class="card"><ul class="why">'+motivoSegnale(r).concat(perche(r).slice(1)).slice(0,5).map(x=>'<li>'+x+'</li>').join("")+'</ul></div>';
-    resto+='<div class="sec">Quanto pesa ogni dato</div><div class="card">'+pesi(r)+'</div>';
+    resto+='<div class="sec">Da dove nasce il numero</div><div class="card">'+origine(r)+'</div>';
     p.innerHTML=ACC.premium?aff+uno+reali+uscite+chiave+resto:uno+chiave+reali+premium(aff+uscite+resto,"pron");
   } else if(TAB==="gol"){
     let h='<div class="sec">Risultati esatti più probabili</div><div class="scores">'+r.celle.slice(0,9).map(c=>'<div><b class="num">'+c[0]+'-'+c[1]+'</b><span class="num">'+pct(c[2],1)+'</span></div>').join("")+'</div>'+notaEsatti()+'<div class="card" style="margin-top:8px">'+barreFasce(r)+'</div>';
@@ -966,7 +992,7 @@ function disegnaTab(f,opt){
     h+=boxMultigol(r,f);
     h+='<div class="sec">Gol per squadra</div><div class="kgrid">'+kp(esc(f.c),r.lamC,null,v=>v.toFixed(2))+kp(esc(f.o),r.lamO,null,v=>v.toFixed(2))+kp("Gol/Gol",r.ggc*100,b.gg,v=>v.toFixed(0)+"%")+kp("No Gol",(1-r.ggc)*100,b.gg!=null?100-b.gg:null,v=>v.toFixed(0)+"%")+'</div>';
     const xg=[[f.c,D.Q[f.c].t],[f.o,D.Q[f.o].t]].filter(x=>x[1]&&x[1].x!=null);
-    if(xg.length) h+='<div class="sec">Expected goals stagione</div><div class="card">'+xg.map(([t,v])=>'<div class="row small" style="padding:4px 0"><span class="grow">'+esc(t)+'</span><span class="num">xG <b>'+v.x+'</b> fatti · <b>'+v.xs+'</b> concessi <span class="muted">('+v.nx+' partite)</span></span></div>').join("")+'<p class="note">Gli xG della stagione entrano nel calcolo: per le partite in cui la fonte li pubblica, il modello usa metà gol reali e metà xG, così un periodo fortunato o sfortunato pesa meno.</p></div>';
+    if(xg.length) h+='<div class="sec">Expected goals stagione</div><div class="card">'+xg.map(([t,v])=>'<div class="row small" style="padding:4px 0"><span class="grow">'+esc(t)+'</span><span class="num">xG <b>'+v.x+'</b> fatti · <b>'+v.xs+'</b> concessi <span class="muted">('+v.nx+' partite)</span></span></div>').join("")+'<p class="note">Gli expected goals dicono quante occasioni crea e concede una squadra, al di là dei gol fatti: un dato in più per capire se un periodo è stato fortunato o sfortunato.</p></div>';
     p.innerHTML=premium(h,"gol");
   } else if(TAB==="ang"){
     p.innerHTML=premium('<div class="sec">Angoli attesi</div><div class="kgrid">'+kp(esc(f.c),r.corC,null,v=>v.toFixed(1))+kp(esc(f.o),r.corO,null,v=>v.toFixed(1))+'</div>'+
@@ -984,26 +1010,22 @@ function disegnaTab(f,opt){
       : '<div class="empty">La fonte non pubblica i tiri per almeno una delle due squadre.</div>',"tiri");
   } else if(TAB==="all"){
     p.innerHTML=premium('<div class="stack" style="margin-top:8px">'+boxAllenatore(f,r,"C",opt)+boxAllenatore(f,r,"O",opt)+'</div>'+
-      '<div class="sec">Scontro di stili</div><div class="card small">'+esc(r.st_c)+' contro '+esc(r.st_o)+': coefficiente di attrito <b class="num">'+r.at.gol.toFixed(2)+'</b> — '+(r.at.gol>1.02?"partita che tende ad aprirsi":r.at.gol<.98?"partita che tende a bloccarsi":"ritmo nella norma")+'.</div>',"all");
-    p.querySelectorAll("[data-edit]").forEach(sel=>sel.addEventListener("change",()=>{ const o=Object.assign({},opt);
-      const lato=sel.dataset.lato, k=sel.dataset.edit; let v=sel.value;
-      if(k==="ass") o["ass"+lato]=+v; else if(k==="st") o["st"+lato]=v||undefined;
-      TAB="all"; renderScheda(f,o); }));
+      '<p class="note">Gli allenatori sono già dentro le probabilità della partita, perché il mercato li conosce: qui trovi i loro numeri veri. Le partite contano Serie A e B, Premier e Championship, Bundesliga e 2. Bundesliga, Liga e Liga 2, Ligue 1 e 2, Portogallo, Olanda, Belgio, Turchia, Grecia e Scozia, ultime 10 stagioni.</p>',"all");
     p.querySelectorAll("[data-cerca]").forEach(inp=>{ const box=inp.nextElementSibling, lato=inp.dataset.cerca;
       inp.addEventListener("input",()=>{ const nomi=cercaAllenatori(inp.value);
         if(!inp.value.trim()){ box.hidden=true; return; }
         box.innerHTML=nomi.length?nomi.map(n=>'<button data-n="'+esc(n)+'">'+esc(n)+'<span>'+(D.C[n].n?D.C[n].n+" partite":"nuovo")+'</span></button>').join(""):'<button disabled>Nessun allenatore con queste lettere</button>';
         box.hidden=false;
         box.querySelectorAll("[data-n]").forEach(b=>b.addEventListener("pointerdown",ev=>{ ev.preventDefault();
-          const o=Object.assign({},opt); o["all"+lato]=b.dataset.n; o["st"+lato]=undefined; TAB="all"; renderScheda(f,o); })); });
+          const o=Object.assign({},opt); o["all"+lato]=b.dataset.n; TAB="all"; renderScheda(f,o); })); });
       inp.addEventListener("blur",()=>setTimeout(()=>box.hidden=true,200)); });
     p.querySelectorAll("[data-salva]").forEach(b=>b.addEventListener("click",()=>{ const lato=b.dataset.salva, t=lato==="C"?f.c:f.o;
-      impostaAllenatore(t,opt["all"+lato]||null); const o=Object.assign({},opt); delete o["all"+lato]; delete o["st"+lato]; TAB="all"; renderScheda(f,o); }));
+      impostaAllenatore(t,opt["all"+lato]||null); const o=Object.assign({},opt); delete o["all"+lato]; TAB="all"; renderScheda(f,o); }));
     p.querySelectorAll("[data-ripristina]").forEach(b=>b.addEventListener("click",()=>{ const lato=b.dataset.ripristina, t=lato==="C"?f.c:f.o;
       impostaAllenatore(t,D.Q[t]._uff); TAB="all"; renderScheda(f,opt); }));
   } else if(TAB==="prec"){
     const pr=precedenti(f.c,f.o);
-    let h='<div class="sec">Scontri diretti</div><div class="card">'+(pr.length?pr.slice().reverse().map(x=>'<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="muted num" style="width:76px">'+dataIt(x[0])+'</span><span class="grow ell">'+esc(x[2])+' – '+esc(x[3])+'</span><b class="num">'+x[4]+'-'+x[5]+'</b></div>').join("")+(r.h2h?'<p class="note">Peso nel calcolo: '+pct(r.h2h.peso)+' (media '+r.h2h.media.toFixed(1)+' gol contro '+r.h2h.attesi.toFixed(1)+' attesi). I precedenti incidono poco: contano molto di più forma e rosa attuali.</p>':""):'<div class="muted small">Nessun precedente nell\'archivio (10 stagioni, campionati e coppe).</div>')+'</div>';
+    let h='<div class="sec">Scontri diretti</div><div class="card">'+(pr.length?pr.slice().reverse().map(x=>'<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="muted num" style="width:76px">'+dataIt(x[0])+'</span><span class="grow ell">'+esc(x[2])+' – '+esc(x[3])+'</span><b class="num">'+x[4]+'-'+x[5]+'</b></div>').join("")+(r.h2h?'<p class="note">Media '+r.h2h.media.toFixed(1)+' gol a partita. I precedenti sono solo un\'informazione: le rose cambiano, e il mercato li conosce già.</p>':""):'<div class="muted small">Nessun precedente nell\'archivio (10 stagioni, campionati e coppe).</div>')+'</div>';
     for(const t of [f.c,f.o]){ const lst=(D.FO[t]||[]).slice().reverse();
       h+='<div class="sec">Ultime di '+esc(t)+'</div><div class="card">'+(lst.length?lst.map(x=>{ const casa=x[2]===t, gf=casa?x[4]:x[5], gs=casa?x[5]:x[4], e=gf>gs?"V":(gf===gs?"N":"P");
         return '<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="form"><i class="'+e+'">'+e+'</i></span><span class="muted num" style="width:76px">'+dataIt(x[0])+'</span><span class="grow ell">'+esc(x[2])+' – '+esc(x[3])+'</span><b class="num">'+x[4]+'-'+x[5]+'</b></div>'; }).join(""):'<div class="muted small">Nessuna partita in archivio.</div>')+'</div>'; }
@@ -1027,54 +1049,45 @@ function medieSquadre(f,tipo){
 
 function perche(r){
   const f=r.f, out=[], d=r.lamC-r.lamO;
-  if(d>.75) out.push('Il modello vede <b>'+esc(f.c)+'</b> nettamente favorita: '+r.lamC.toFixed(2)+' gol attesi contro '+r.lamO.toFixed(2)+'.');
+  if(d>.75) out.push('I numeri vedono <b>'+esc(f.c)+'</b> nettamente favorita: '+r.lamC.toFixed(2)+' gol attesi contro '+r.lamO.toFixed(2)+'.');
   else if(d>.3) out.push('<b>'+esc(f.c)+'</b> è favorita ma non blindata ('+r.lamC.toFixed(2)+' contro '+r.lamO.toFixed(2)+' gol attesi).');
   else if(d<-.75) out.push('<b>'+esc(f.o)+'</b> nettamente favorita anche in trasferta: '+r.lamO.toFixed(2)+' gol attesi contro '+r.lamC.toFixed(2)+'.');
   else if(d<-.3) out.push('Nonostante il fattore campo i numeri premiano <b>'+esc(f.o)+'</b> ('+r.lamO.toFixed(2)+' contro '+r.lamC.toFixed(2)+' gol attesi).');
   else out.push('Partita equilibrata ('+r.lamC.toFixed(2)+' – '+r.lamO.toFixed(2)+' gol attesi): il pareggio pesa più del solito.');
-  for(const [t,coach,par] of [[f.c,r.all_c,r.pc],[f.o,r.all_o,r.po]]){
-    const q=D.Q[t]; if(q.solo){ out.push(esc(t)+': rating ricavato dalle '+q.solo[2]+' partite europee in archivio.'); continue; }
-    if(!coach) continue;
-    if(par.fonte==="attuale"&&q.sp){ const n=q.sp.n_qui, w=q.sp.att[2];
-      out.push('<b>'+esc(coach)+'</b> a '+esc(t)+': '+n+' partite in archivio, il suo dato pesa il '+pct(w)+' sui gol'+(n<15?' — ancora poche partite, prendere con le pinze':'')+'.'); }
-    else if(par.fonte==="carriera") out.push('<b>'+esc(coach)+'</b> non ha mai allenato '+esc(t)+' nell\'archivio: conta la storia della squadra corretta con la sua carriera.');
+  for(const [t,coach] of [[f.c,r.all_c],[f.o,r.all_o]]){
+    const q=D.Q[t]; if(q.solo){ out.push(esc(t)+': forza ricavata dalle '+q.solo[2]+' partite europee in archivio.'); continue; }
+    const c=coach&&D.C[coach], per=c&&c.squadre?c.squadre.find(x=>x[0]===t):null;
+    if(per&&per[1]>=10) out.push('<b>'+esc(coach)+'</b> a '+esc(t)+': '+per[1]+' partite, '+per[5]+' gol fatti e '+per[6]+' subiti a partita.');
   }
-  if(r.at.gol>1.02||r.at.gol<.98) out.push('Stili: '+esc(r.st_c)+' contro '+esc(r.st_o)+' → '+(r.at.gol>1?'gara che tende ad aprirsi':'gara che tende a bloccarsi')+'.');
   const b=r.base.L; if(b&&b.px!=null){ const dx=100*r.px-b.px; out.push('Nel DNA di '+esc(r.base.nome)+' il pareggio esce il '+b.px+'% delle volte; qui '+pct(r.px,1)+' ('+(dx>=0?"+":"")+dx.toFixed(1)+' punti).'); }
   if(r.der) out.push('È il <b>'+esc(r.der[0])+'</b>: cartellini sopra la media.');
-  if(r.h2h) out.push('Precedenti: '+r.h2h.n+' partite, media '+r.h2h.media.toFixed(1)+' gol — peso '+pct(r.h2h.peso)+'.');
+  if(r.h2h&&r.h2h.n>=3) out.push('Precedenti: '+r.h2h.n+' partite, media '+r.h2h.media.toFixed(1)+' gol a partita.');
   if(r.base.tipo==="coppa") out.push('Coppa europea: forza di ogni campionato misurata sui risultati reali delle sue squadre in Europa.');
   return out; }
 
-function pesi(r){
-  const righe=[];
-  for(const [t,coach,par] of [[r.f.c,r.all_c,r.pc],[r.f.o,r.all_o,r.po]]){
-    const q=D.Q[t]; if(q.solo) { righe.push('<div class="small" style="margin-bottom:10px"><b>'+esc(t)+'</b>: solo storico coppe europee ('+q.solo[2]+' partite)</div>'); continue; }
-    let qui=0, car=0;
-    if(par.fonte==="attuale"&&q.sp){ qui=q.sp.att[2]; car=(1-qui)*q.sp.att[4]; }
-    else if(par.fonte==="carriera"&&coach&&D.C[coach]&&D.C[coach].car){ const w=D.C[coach].car[0][1]; car=(w/(w+K_CAR))*CAP.att; }
-    const base=1-qui-car;
-    righe.push('<div style="margin-bottom:12px"><div class="row small"><b class="grow ell">'+esc(t)+'</b><span class="muted tiny">gol</span></div>'+
-      '<div class="mix"><span style="width:'+pct(base,1)+';background:#5d6a8f"></span><span style="width:'+pct(qui,1)+';background:var(--ac)"></span><span style="width:'+pct(car,1)+';background:var(--pick)"></span></div>'+
-      '<div class="mix-l num"><span><i style="background:#5d6a8f"></i>Storia squadra '+pct(base)+'</span><span><i style="background:var(--ac)"></i>'+esc(coach||"allenatore")+' qui '+pct(qui)+'</span><span><i style="background:var(--pick)"></i>Sua carriera '+pct(car)+'</span></div></div>'); }
-  return righe.join("")+'<p class="note">Più partite ha un allenatore sulla panchina attuale, più il suo dato pesa. La sua carriera altrove conta poco per scelta dei dati: su centinaia di cambi di panchina reali, l\'effetto di un allenatore su una squadra si è ripetuto nella successiva solo in piccola parte (più sugli angoli che sui gol).</p>'; }
+const USCITO={"1":(a,b)=>a>b,"X":(a,b)=>a===b,"2":(a,b)=>a<b,"O25":(a,b)=>a+b>2,"U25":(a,b)=>a+b<=2,"GG":(a,b)=>a>0&&b>0,"NG":(a,b)=>!(a>0&&b>0)};
+function origine(r){
+  const V=D.V, q=V.q, rr=V.r, p=x=>n2(100*x,1)+"%";
+  let h;
+  if(r.fonte==="q") h='<p class="small" style="margin:0">Il punto di partenza sono <b>le attese del mercato delle scommesse</b> per questa partita (le quote, tolto il guadagno del bookmaker): chi fa le quote sa già di infortuni, allenatori, stanchezza e coppe giocate. Poi c\'è la correzione sul passato: '+q.n.toLocaleString("it-IT")+' partite di 16 campionati in 10 anni, fascia per fascia.</p>'+
+    '<p class="note">Su quelle partite: favorito indovinato il '+p(q.acc1x2)+', Over/Under 2.5 il '+p(q.ou)+', Gol/No Gol il '+p(q.gg)+'. Il nostro vecchio modello senza quote si fermava al '+p(V.vecchio.acc1x2)+' sul favorito.</p>';
+  else if(r.fonte==="r") h='<p class="small" style="margin:0">Le quote di questa partita non sono ancora uscite'+(r.base.tipo==="coppa"?' (per le coppe europee la fonte non le pubblica)':' (di solito arrivano 2-4 giorni prima)')+': il numero viene dalla <b>forza delle due squadre ricavata dalle quote delle loro ultime partite</b>, poi corretto sul passato.</p>'+
+    '<p class="note">Verificato su '+rr.n.toLocaleString("it-IT")+' partite: favorito indovinato il '+p(rr.acc1x2)+', Over/Under 2.5 il '+p(rr.ou)+' (con le quote della partita: '+p(q.acc1x2)+' e '+p(q.ou)+').'+(r.base.tipo==="coppa"?' In coppa conta anche la forza dei campionati, misurata sui risultati europei.':' Quando arriveranno le quote il numero si aggiornerà da solo.')+'</p>';
+  else h='<p class="small" style="margin:0">Almeno una squadra non ha quote nell\'archivio (es. vista solo in coppa): il numero viene dalla <b>storia dei risultati</b> (gol fatti e subiti, forza del campionato) ed è meno preciso.</p>';
+  return h+'<p class="note">Gli allenatori contano, ma sono già dentro le quote: i loro numeri li trovi nella sezione Allenatori, non li contiamo due volte.</p>'; }
 
 function boxAllenatore(f,r,lato,opt){
   const t=lato==="C"?f.c:f.o, q=D.Q[t], coach=lato==="C"?r.all_c:r.all_o, st=lato==="C"?r.st_c:r.st_o;
   const c=coach?D.C[coach]:null; const per=c&&c.squadre?c.squadre.find(x=>x[0]===t):null;
-  const stili=Object.keys(D.STILI).map(s=>'<option'+(s===st?" selected":"")+'>'+esc(s)+'</option>').join("");
-  const ass=(opt["ass"+lato]||0);
   const provvisorio = opt["all"+lato]!==undefined && (opt["all"+lato]||null)!==(q.all||null);
   const salva = provvisorio ? '<button class="btn ghost full" style="margin-top:10px" data-salva="'+lato+'">Usa sempre '+esc(coach||"nessun allenatore")+' per '+esc(t)+'</button>' : "";
   const corr = q.mod&&!provvisorio ? '<div class="warn" style="margin-top:10px">Allenatore impostato da te. Secondo i dati ufficiali è <b>'+esc(q._uff||"non noto")+'</b>: quando cambieranno, la tua correzione si toglierà da sola. <button class="pill" style="margin-left:4px" data-ripristina="'+lato+'">Ripristina</button></div>' : "";
   return '<div class="coach"><div class="row">'+'<div class="grow"><div class="tiny muted">'+esc(t)+'</div><h3>'+esc(coach||"Allenatore non noto")+'</h3>'+(q.nota&&!q.mod&&!opt["all"+lato]?'<div class="tiny" style="color:var(--pick)">'+esc(q.nota)+'</div>':"")+'</div>'+(coach?'<button class="pill" data-vai="#a/'+esc(encodeURIComponent(coach))+'">Scheda</button>':"")+'</div>'+
-    (c&&c.n?'<div class="stat-g num"><div><b>'+c.n+'</b><span>partite in carriera</span></div><div><b>'+c.v+'%</b><span>vittorie</span></div><div><b>'+c.gf+'</b><span>gol fatti</span></div><div><b>'+c.ov+'%</b><span>Over 2.5</span></div><div><b>'+(c.cor!=null?c.cor:"—")+'</b><span>angoli</span></div><div><b>'+(c.gia!=null?c.gia:"—")+'</b><span>gialli</span></div></div>':"")+
+    (c&&c.n?'<div class="stat-g num"><div><b>'+c.n+'</b><span>partite (10 anni)</span></div><div><b>'+c.v+'%</b><span>vittorie</span></div><div><b>'+c.gf+'</b><span>gol fatti</span></div><div><b>'+c.ov+'%</b><span>Over 2.5</span></div><div><b>'+(c.cor!=null?c.cor:"—")+'</b><span>angoli</span></div><div><b>'+(c.gia!=null?c.gia:"—")+'</b><span>gialli</span></div></div>':"")+
     (c&&c.eu?'<p class="note">In coppa europea: <b>'+c.eu[0]+'</b> partite, '+c.eu[1]+'% vittorie, '+c.eu[3]+' gol fatti e '+c.eu[4]+' subiti a partita.</p>':"")+
-    (per?'<p class="note">Qui a '+esc(t)+': <b>'+per[1]+'</b> partite ('+per[2]+'% vittorie, '+per[5]+' gol fatti e '+per[6]+' subiti a partita)'+(q.dal&&coach===q.all?', in carica dal '+dataIt(q.dal):"")+'.</p>':(coach?'<p class="note">Nessuna partita di '+esc(coach)+' con '+esc(t)+' nell\'archivio: il modello usa la sua carriera altrove.</p>':""))+
-    '<label class="lb">Cambia allenatore (scrivi per cercare)</label><div class="sug"><input type="search" data-cerca="'+lato+'" placeholder="es. “con” → Antonio Conte" autocomplete="off"><div class="sug-list" hidden></div></div>'+
-    '<div class="row" style="gap:8px"><div class="grow"><label class="lb">Identità di gioco</label><select data-edit="st" data-lato="'+lato+'">'+stili+'</select></div>'+
-    '<div style="width:110px"><label class="lb">Assenze pesanti</label><select data-edit="ass" data-lato="'+lato+'">'+[0,1,2,3].map(n=>'<option'+(n===ass?" selected":"")+'>'+n+'</option>').join("")+'</select></div></div>'+
-    (!stileClassificato(coach)?'<p class="note">Identità di gioco di '+esc(coach||"questo allenatore")+' non ancora classificata: il modello la considera neutra. Puoi sceglierla tu qui sopra.</p>':"")+salva+corr+'</div>'; }
+    (per?'<p class="note">Qui a '+esc(t)+': <b>'+per[1]+'</b> partite ('+per[2]+'% vittorie, '+per[5]+' gol fatti e '+per[6]+' subiti a partita)'+(q.dal&&coach===q.all?', in carica dal '+dataIt(q.dal):"")+'.</p>':(coach?'<p class="note">Nessuna partita di '+esc(coach)+' con '+esc(t)+' nell\'archivio.</p>':""))+
+    '<label class="lb">Allenatore sbagliato o appena cambiato? Correggilo (scrivi per cercare)</label><div class="sug"><input type="search" data-cerca="'+lato+'" placeholder="es. “con” → Antonio Conte" autocomplete="off"><div class="sug-list" hidden></div></div>'+
+    (c&&c.st?'<p class="note">Identità di gioco: <b>'+esc(c.st)+'</b>.</p>':'')+salva+corr+'</div>'; }
 function stileClassificato(coach){ return !!(coach&&D.C[coach]&&D.C[coach].st); }
 
 /* ---------------- CLASSIFICHE ---------------- */
@@ -1121,28 +1134,12 @@ function nomeMercato(k,f){
   if(/^[OU]\d/.test(k)) return (k[0]==="O"?"Over ":"Under ")+k.slice(1);
   if(k.startsWith("MGC")) return "Multigol casa "+k.slice(3); if(k.startsWith("MGO")) return "Multigol ospite "+k.slice(3);
   return "Multigol "+k.slice(2); }
-/* margine d'incertezza di OGNI mercato: gli stessi 400 scenari dell'affidabilità (stesso seme), così i numeri coincidono */
-function margini(r){
-  if(r.marg) return r.marg;
-  const base=probMercati(matrice(r.lamRaw[0],r.lamRaw[1],r.rho)), uc=incertezza(r.f.c,r.all_c), uo=incertezza(r.f.o,r.all_o), R=rng(hash(r.key+"|aff")), N=400, K=KEYS_M.length;
-  const v=KEYS_M.map(()=>new Float64Array(N)), tot=new Float64Array(21), ca=new Float64Array(11), os=new Float64Array(11), pc=new Float64Array(11), po=new Float64Array(11), out=new Float64Array(K), rho=r.rho;
-  for(let n=0;n<N;n++){
-    const aC=Math.exp(rNorm(R)*uc.a), dC=Math.exp(rNorm(R)*uc.d), aO=Math.exp(rNorm(R)*uo.a), dO=Math.exp(rNorm(R)*uo.d);
-    let [lc,lo]=smorza(r.grezzi.lamC*aC*dO,r.grezzi.lamO*aO*dC,r.grezzi.totL); lc=clamp(lc,.12,4.6); lo=clamp(lo,.12,4.6);
-    // stessa matrice di matrice() (Poisson + correzione Dixon-Coles, normalizzata), senza costruirla
-    pc[0]=Math.exp(-lc); po[0]=Math.exp(-lo); for(let k=1;k<11;k++){ pc[k]=pc[k-1]*lc/k; po[k]=po[k-1]*lo/k; }
-    tot.fill(0); ca.fill(0); os.fill(0); let p1=0,px=0,p2=0,gg=0,t=0;
-    for(let i=0;i<11;i++) for(let j=0;j<11;j++){ let x=pc[i]*po[j];
-      if(i<2&&j<2) x*=i===0?(j===0?Math.max(1-lc*lo*rho,.05):Math.max(1+lc*rho,.05)):(j===0?Math.max(1+lo*rho,.05):Math.max(1-rho,.05));
-      t+=x; tot[i+j]+=x; ca[i]+=x; os[j]+=x; if(i>j)p1+=x; else if(i===j)px+=x; else p2+=x; if(i&&j) gg+=x; }
-    for(let k=0;k<21;k++) tot[k]/=t; for(let k=0;k<11;k++){ ca[k]/=t; os[k]/=t; }
-    valoriMercati(tot,ca,os,p1/t,px/t,p2/t,gg/t,out); for(let k=0;k<K;k++) v[k][n]=out[k]; }
-  const m={}; KEYS_M.forEach((k,i)=>{ const a=v[i].sort(); m[k]=Math.max(0,base[k]-a[Math.floor(.1*N)]); });
-  return (r.marg=m); }
 function boxMultigol(r,f){ const pm=probMercati(r.P);
   const blocco=(tit,pre,lst)=>{ const v=lst.map(([a,b])=>[a+"-"+b,pm[pre+a+"-"+b]]), mx=Math.max(...v.map(x=>x[1]));
     return '<div class="tiny muted" style="font-weight:700;margin:12px 0 6px">'+tit+'</div><div class="mgrid">'+v.map(x=>'<div'+(x[1]===mx?' class="hl"':'')+'><b class="num">'+x[0]+'</b><span class="num">'+pct(x[1],1)+'</span></div>').join("")+'</div>'; };
   return '<div class="sec">Multigol</div><div class="card" style="padding-top:2px">'+blocco("Totale partita","MG",MG_TOT)+blocco("Casa · "+esc(f.c),"MGC",MG_SQ)+blocco("Ospite · "+esc(f.o),"MGO",MG_SQ)+'</div>'; }
+/* giocate troppo scontate per una combinazione: escono quasi sempre ma non valgono la pena */
+const ESCLUSE_COMB=new Set(["O0.5","U4.5","MG1-5","MG1-6","MG2-6"]);
 function famOk(k,fam){ return fam==="tutti"||(fam==="esito"&&/^(1|X|2|1X|X2|12)$/.test(k))||(fam==="ou"&&/^[OU]\d/.test(k))||(fam==="gg"&&(k==="GG"||k==="NG"))||(fam==="mg"&&k.startsWith("MG")); }
 function verificaFascia(tab,p){ if(!tab) return null; const f=Math.floor(p*20)*5; return tab.find(x=>x[0]===f)||null; }
 function etichettaGiorno(g){ const oggi=dkey(new Date()), dom=dkey(new Date(Date.now()+864e5)); if(g===oggi) return "Oggi"; if(g===dom) return "Domani";
@@ -1159,7 +1156,7 @@ function schermoComb(){
   let pan="";
   if(sc.vista==="es"){
     // le partite più "chiuse": quelle dove i K risultati più probabili coprono di più. Fuori quelle con dati scarsi.
-    const lst=pool.filter(r=>affid(r).margine<.10).map(r=>{ const top=r.celle.slice(0,sc.k); return {r,top,cop:top.reduce((a,c)=>a+c[2],0)}; }).sort((a,b)=>b.cop-a.cop).slice(0,sc.nEs);
+    const lst=pool.filter(r=>r.dati.t!=="scarsi").map(r=>{ const top=r.celle.slice(0,sc.k); return {r,top,cop:top.reduce((a,c)=>a+c[2],0)}; }).sort((a,b)=>b.cop-a.cop).slice(0,sc.nEs);
     const tutte=lst.reduce((a,x)=>a*x.cop,1), media=lst.reduce((a,x)=>a+x.cop,0)/(lst.length||1), vf=verificaFascia(D.PV&&D.PV.ver_esatti&&D.PV.ver_esatti[sc.k],media);
     pan=chipsDi([[3,"3 partite"],[4,"4 partite"],[5,"5 partite"],[6,"6 partite"]],sc.nEs,"cn")+chipsDi([[3,"3 risultati"],[4,"4 risultati"],[5,"5 risultati"]],sc.k,"ck")+
       '<div class="card" style="padding:4px 12px">'+(lst.length?lst.map((x,i)=>'<div class="comb-r"><div class="row small"><span class="grow ell"><b>'+(i+1)+'. '+esc(x.r.f.c)+' – '+esc(x.r.f.o)+'</b></span><span class="tiny muted">'+esc(etichettaGiorno(x.r.f.day))+' '+oraLoc(x.r.f.t)+'</span></div>'+
@@ -1169,21 +1166,21 @@ function schermoComb(){
       (lst.length?'<div class="comb-tot"><span class="small">Escono tutte e '+lst.length+' insieme</span><b class="disp num" style="font-size:22px">'+pct(tutte,1)+'</b></div>'+
         (vf?'<p class="note">Verificato sul passato: quando i '+sc.k+' risultati più probabili coprivano il '+vf[0]+'–'+(vf[0]+5)+'%, ne è uscito uno il <b>'+n2(vf[3],1)+'%</b> delle volte ('+vf[1].toLocaleString("it-IT")+' partite).</p>':''):'');
   } else if(sc.vista==="co"){
-    // per ogni partita la scelta più probabile (entro il tetto); in classifica conta anche la qualità dei dati
-    const cap=sc.cap/100, lst=pool.map(r=>{ const pm=probMercati(r.P), mg=margini(r); let best=null;
-      for(const k in pm){ if(pm[k]>cap+1e-9||!famOk(k,sc.fam)) continue; const pr=pm[k]-(mg[k]||0); if(!best||pr>best.pr) best={k,p:pm[k],pr,m:mg[k]||0}; }
-      return best?Object.assign({r},best):null; }).filter(Boolean).sort((a,b)=>b.pr-a.pr).slice(0,sc.nCo).sort((a,b)=>b.p-a.p);   // scelte con prudenza, mostrate in ordine di probabilità
+    // per ogni partita la scelta più probabile SOTTO il tetto: niente giocate quasi scontate (Over 0.5, multigol 1-6...),
+    // che non valgono la pena. Fuori le partite con dati scarsi.
+    const cap=sc.cap/100, lst=pool.filter(r=>r.dati.t!=="scarsi").map(r=>{ const pm=probMercati(r.P); let best=null;
+      for(const k in pm){ if(ESCLUSE_COMB.has(k)||pm[k]>cap+1e-9||!famOk(k,sc.fam)) continue; if(!best||pm[k]>best.p) best={k,p:pm[k]}; }
+      return best?Object.assign({r},best):null; }).filter(Boolean).sort((a,b)=>b.p-a.p).slice(0,sc.nCo);
     const tutte=lst.reduce((a,x)=>a*x.p,1), media=lst.reduce((a,x)=>a+x.p,0)/(lst.length||1), vf=sc.fam==="tutti"?verificaFascia(D.PV&&D.PV.ver_scelte&&D.PV.ver_scelte[String(sc.cap)],media):null;
-    const q=m=>qualita({margine:m});
-    pan=chipsDi([[3,"3"],[4,"4"],[5,"5"],[6,"6"],[8,"8"],[10,"10 partite"]],sc.nCo,"cn2")+chipsDi([[100,"Massima sicurezza"],[90,"Scelte fino al 90%"],[85,"Fino all'85%"]],sc.cap,"cc")+
+    pan=chipsDi([[3,"3"],[4,"4"],[5,"5"],[6,"6"],[8,"8"],[10,"10 partite"]],sc.nCo,"cn2")+chipsDi([[80,"Fino all'80%"],[75,"Fino al 75%"],[70,"Fino al 70%"],[65,"Fino al 65%"]],sc.cap,"cc")+
       chipsDi([["tutti","Tutte le giocate"],["esito","1X2 e doppia chance"],["ou","Over/Under"],["gg","Gol/No Gol"],["mg","Multigol"]],sc.fam,"cf")+
       '<div class="card" style="padding:4px 12px">'+(lst.length?lst.map((x,i)=>'<div class="comb-r"><div class="row small"><span class="grow ell"><b>'+(i+1)+'. '+esc(x.r.f.c)+' – '+esc(x.r.f.o)+'</b></span><span class="tiny muted">'+esc(etichettaGiorno(x.r.f.day))+' '+oraLoc(x.r.f.t)+'</span></div>'+
         '<div class="row" style="margin-top:4px"><b class="grow" style="color:var(--win)">'+esc(nomeMercato(x.k,x.r.f))+'</b><b class="disp num" style="font-size:19px">'+pct(x.p,1)+'</b></div>'+
-        '<div class="tiny muted">'+bandiera(x.r.f.comp)+' '+esc(nomeComp(x.r.f.comp))+' · dati <span style="color:'+q(x.m).c+'">'+q(x.m).t+'</span></div></div>').join("")
+        '<div class="tiny muted">'+bandiera(x.r.f.comp)+' '+esc(nomeComp(x.r.f.comp))+' · dati <span style="color:'+x.r.dati.c+'">'+x.r.dati.t+'</span></div></div>').join("")
         :'<div class="empty">Nessuna partita in questo periodo.</div>')+'</div>'+
       (lst.length?'<div class="comb-tot"><span class="small">Escono tutte e '+lst.length+' insieme</span><b class="disp num" style="font-size:22px">'+pct(tutte,1)+'</b></div>'+
-        (vf?'<p class="note">Verificato sul passato: le scelte come queste (al '+vf[0]+'–'+(vf[0]+5)+'%) sono uscite il <b>'+n2(vf[3],1)+'%</b> delle volte ('+vf[1].toLocaleString("it-IT")+' partite). Sono probabilità del modello, non quote: l\'app non usa le quote dei bookmaker.</p>':'')+
-        (sc.cap===100?'<p class="note">«Massima sicurezza» sceglie anche le giocate quasi scontate (come l\'Over 0.5). Per scelte più giocabili usa «Scelte fino al 90%».</p>':''):'');
+        (vf?'<p class="note">Verificato sul passato: le scelte come queste (al '+vf[0]+'–'+(vf[0]+5)+'%) sono uscite il <b>'+n2(vf[3],1)+'%</b> delle volte ('+vf[1].toLocaleString("it-IT")+' partite).</p>':'')+
+        '<p class="note">Le giocate quasi scontate (Over 0.5, Under 4.5, Multigol 1-5, 1-6 e 2-6) non vengono mai scelte: escono quasi sempre ma non valgono la pena. Il tetto decide quanto può essere sicura ogni scelta: più è basso, più le scelte sono rischiose.</p>':'');
   }
   h+=pan?'<div style="margin-top:10px">'+pan+'</div><p class="note">Più partite metti insieme, più la probabilità che escano tutte scende. Gioca responsabilmente · 18+</p>':'';
   box.innerHTML=ACC.premium?h:'<div class="sec">Le combinazioni</div>'+vetrina("comb");
@@ -1214,7 +1211,7 @@ function schermoPreferite(){
       '<td>'+pct(r.p1)+'<br>'+pct(r.px)+'<br>'+pct(r.p2)+'</td><td>'+pct(r.o25)+'</td><td>'+pct(r.ggc)+'</td><td>'+n2(r.lamC+r.lamO)+'</td><td>'+(r.stimati?"—":n2(r.corC+r.corO,1))+'</td><td>'+n2(r.kar,1)+'</td>'+
       '<td>'+(ACC.premium?esc(a.pr.lab)+'<br><b>'+pct(a.val)+'</b>':LUCC)+'</td></tr>'; }).join("");
   box.innerHTML='<div class="sec">Lo studio</div><div class="card" style="padding:6px 8px"><div class="tbl-w"><table class="num studio"><thead><tr><th style="text-align:left">Partita</th><th>1 X 2</th><th>Over 2.5</th><th>Gol/Gol</th><th>Gol</th><th>Angoli</th><th>Cart.</th><th>Uscita</th></tr></thead><tbody>'+righe+'</tbody></table></div></div>'+
-    '<p class="note">Tocca una riga per aprire la partita. Gol, angoli e cartellini sono quelli attesi; Uscita = uscita indicata e affidabilità'+(ACC.premium?"":" (versione completa)")+'. Le partite restano nella lista fino a 4 giorni dopo che sono state giocate.</p>'+
+    '<p class="note">Tocca una riga per aprire la partita. Gol, angoli e cartellini sono quelli attesi; Uscita = uscita indicata e sua probabilità'+(ACC.premium?"":" (versione completa)")+'. Le partite restano nella lista fino a 4 giorni dopo che sono state giocate.</p>'+
     '<div class="sec">Le partite</div><div class="stack">'+lst.map(cardPartita).join("")+'</div>'+
     '<button class="btn ghost full" style="margin-top:14px" id="pref-svuota">Svuota la lista</button>';
   box.querySelectorAll(".match").forEach(b=>b.addEventListener("click",()=>vai("#m/"+b.dataset.i)));
@@ -1222,27 +1219,27 @@ function schermoPreferite(){
 }
 
 /* ---------------- CONFRONTO: chi rispetta i pronostici e i numeri dei campionati ---------------- */
-const MET_PV=[["esito","1X2","l'esito (1, X o 2) più probabile secondo il modello"],["ou","Over/Under 2.5","l'Over o Under 2.5 indicato dal modello"],["gg","Gol/No Gol","il Gol/Gol o No Gol indicato dal modello"],["ex","Risultato esatto","il risultato esatto tra i 3 più probabili secondo il modello"]];
+const MET_PV=[["esito","1X2","l'esito (1, X o 2) più probabile"],["ou","Over/Under 2.5","l'Over o Under 2.5 indicato"],["gg","Gol/No Gol","il Gol/Gol o No Gol indicato"],["ex","Risultato esatto","il risultato esatto tra i 3 più probabili secondo il modello"]];
 const MET_NUM=[["gol","Gol a partita"],["o25","Over 2.5"],["gg","Gol/Gol"],["o15","Over 1.5"],["o35","Over 3.5"],["zero","0-0"],["casa","Vince chi gioca in casa"],["x","Pareggi"]];
 const PERIODI=[["10","Ultimi 10 anni"],["3","Ultimi 3 anni"],["1","Ultimo anno"]];
 const MERCATI_L={"1":"Vince la squadra di casa","X":"Pareggio","2":"Vince la squadra in trasferta","O25":"Over 2.5","U25":"Under 2.5","GG":"Gol/Gol","NG":"No Gol"};
 const MET_SQ=MET_PV.concat([["dgf","Segnano più del previsto"],["dgs","Subiscono meno del previsto"]]);
-/* per ogni campionato: su quali pronostici il modello si è dimostrato più solido quando era sicuro */
+/* per ogni campionato: su quali pronostici i numeri si sono dimostrati più solidi quando erano sicuri */
 function cosaDiconoIDati(l){
   const PV=D.PV, M=(PV.mercati||{})[l], L=PV.leghe[l], N=(PV.num||{})[l]||{}, sg=STATO.soglia;
   if(!M||!L) return '<div class="card small">Dati non disponibili per questo campionato.</div>';
   const lst=Object.keys(MERCATI_L).map(k=>{ const v=M[k+"|"+sg]; return v&&v[0]>=40?{k,n:v[0],hit:v[1],freq:v[2]}:null; }).filter(Boolean).sort((a,b)=>b.hit-a.hit);
   const best=lst[0];
   let h='<div class="card">';
-  h+=best?'<p class="small" style="margin:0 0 8px">In <b>'+esc(nomeComp(l))+'</b> il dato più solido è <b>«'+MERCATI_L[best.k]+'»</b> quando il modello lo dà almeno al '+sg+'%: è uscito il <b style="color:var(--win)">'+n2(best.hit,1)+'%</b> delle volte su '+best.n.toLocaleString("it-IT")+' partite.</p>'
-    :'<p class="small" style="margin:0 0 8px">Con una soglia così alta il modello è sicuro troppo di rado in questo campionato: prova una soglia più bassa.</p>';
-  h+=lst.map((x,i)=>'<div class="row small" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="grow">'+(i===0?'<b style="color:var(--win)">★ </b>':'')+MERCATI_L[x.k]+'<div class="tiny muted">il modello è sicuro nel '+n2(x.freq,1)+'% delle partite ('+x.n.toLocaleString("it-IT")+')</div></span><b class="num" style="font-size:16px;color:'+(x.hit>=65?"var(--win)":x.hit>=55?"var(--tx)":"var(--mu)")+'">'+n2(x.hit,1)+'%</b></div>').join("");
+  h+=best?'<p class="small" style="margin:0 0 8px">In <b>'+esc(nomeComp(l))+'</b> il dato più solido è <b>«'+MERCATI_L[best.k]+'»</b> quando il pronostico lo dà almeno al '+sg+'%: è uscito il <b style="color:var(--win)">'+n2(best.hit,1)+'%</b> delle volte su '+best.n.toLocaleString("it-IT")+' partite.</p>'
+    :'<p class="small" style="margin:0 0 8px">Con una soglia così alta il pronostico è sicuro troppo di rado in questo campionato: prova una soglia più bassa.</p>';
+  h+=lst.map((x,i)=>'<div class="row small" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="grow">'+(i===0?'<b style="color:var(--win)">★ </b>':'')+MERCATI_L[x.k]+'<div class="tiny muted">succede nel '+n2(x.freq,1)+'% delle partite ('+x.n.toLocaleString("it-IT")+')</div></span><b class="num" style="font-size:16px;color:'+(x.hit>=65?"var(--win)":x.hit>=55?"var(--tx)":"var(--mu)")+'">'+n2(x.hit,1)+'%</b></div>').join("");
   h+='<div class="row small" style="padding:7px 0"><span class="grow">Risultato esatto<div class="tiny muted">anche contando i 3 più probabili insieme</div></span><b class="num" style="font-size:16px;color:var(--loss)">'+n2(L.ex,1)+'%</b></div>';
   const tr=(k,lab)=>{ const a=N["10"]&&N["10"][k], b=N["1"]&&N["1"][k]; if(a==null||b==null) return ""; const d=b-a;
     return Math.abs(d)<3?"":'<li>'+lab+': '+n2(a,1)+'% negli ultimi 10 anni, '+n2(b,1)+'% nell\'ultimo anno ('+(d>0?"in crescita":"in calo")+').</li>'; };
   const tend=tr("o25","Over 2.5")+tr("gg","Gol/Gol")+tr("casa","Vittorie in casa")+tr("x","Pareggi");
   if(tend) h+='<ul class="why" style="margin-top:8px">'+tend+'</ul>';
-  h+='<p class="note">Il risultato esatto è sempre il pronostico più difficile: meglio guardare i mercati in alto nella lista. Sono frequenze del passato ('+PV.stag_l[0]+' – '+PV.stag_l[PV.stag_l.length-1]+', ogni partita pronosticata solo con le partite precedenti): aiutano a capire dove il modello è più solido, non sono garanzie. Gioca responsabilmente · 18+</p></div>';
+  h+='<p class="note">Il risultato esatto è sempre il pronostico più difficile: meglio guardare i mercati in alto nella lista. Sono frequenze del passato ('+PV.stag_l[0]+' – '+PV.stag_l[PV.stag_l.length-1]+', ogni partita pronosticata solo con le partite precedenti): aiutano a capire dove i pronostici sono più solidi, non sono garanzie. Gioca responsabilmente · 18+</p></div>';
   return h; }
 function vistaLeghe(){
   const conf=STATO.legheVista==="conf";
@@ -1256,12 +1253,15 @@ function barraRiga(nome,sotto,v,min,max,testo,col){ const w=max>min?12+88*(v-min
 function schermoConfronto(){
   const PV=D.PV, box=$("conf-box");
   if(!PV){ box.innerHTML='<div class="empty">Dati non ancora disponibili: arriveranno con il prossimo aggiornamento.</div>'; return; }
-  const m=MET_PV.find(x=>x[0]===STATO.pv)||MET_PV[0], nl=PV.leghe;
-  const L=Object.keys(nl).sort((a,b)=>nl[b][m[0]]-nl[a][m[0]]), vals=L.map(l=>nl[l][m[0]]);
-  let h='<div class="sec">Quale campionato rispetta di più i pronostici</div>'+chipsDi(MET_PV.map(x=>[x[0],x[1]]),m[0],"pv")+
-    '<div class="card" style="padding:4px 12px">'+L.map(l=>barraRiga(esc(nomeComp(l)),nl[l].n.toLocaleString("it-IT")+' partite',nl[l][m[0]],Math.min(...vals),Math.max(...vals),n2(nl[l][m[0]],1)+'%',"var(--win)")).join("")+'</div>'+
-    '<p class="note">Quante volte è uscito '+m[2]+', su '+Object.values(nl).reduce((a,x)=>a+x.n,0).toLocaleString("it-IT")+' partite delle stagioni '+PV.stag_l[0]+' – '+PV.stag_l[PV.stag_l.length-1]+
-    '. Ogni pronostico è fatto solo con le partite precedenti, come se fosse quel giorno. Più è alto, più il campionato rispetta i pronostici.</p>';
+  const nl=PV.leghe, L=Object.keys(nl).sort((a,b)=>nl[b].esito-nl[a].esito), V=D.V.q;
+  const cella=(v,lo,hi)=>'<td style="color:'+(v>=hi?"var(--win)":v<lo?"var(--mu)":"var(--tx)")+'">'+n2(v,0)+'%</td>';
+  let h='<div class="sec">Quanto ci prendono i pronostici</div>'+
+    '<div class="card" style="padding:6px 8px"><div class="tbl-w"><table class="num" style="font-size:13px"><thead><tr><th style="text-align:left">Campionato</th><th>1X2</th><th>O/U</th><th>GG/NG</th><th>Esatto</th></tr></thead><tbody>'+
+    L.map(l=>'<tr><td class="tn" style="text-align:left;max-width:120px">'+esc(nomeComp(l).replace(/ · .*/,""))+'</td>'+
+      cella(nl[l].esito,48,54)+cella(nl[l].ou,56,60)+cella(nl[l].gg,54,57)+cella(nl[l].ex,32,36)+'</tr>').join("")+'</tbody></table></div></div>'+
+    '<p class="note">Su 100 partite di ogni campionato, quante volte è uscito il pronostico, calcolato prima della partita come se fosse quel giorno: tutte le partite delle ultime 10 stagioni ('+PV.stag_l[0]+' – '+PV.stag_l[PV.stag_l.length-1]+'). '+
+    '<b>1X2</b>: l\'esito più probabile tra 1, X e 2. <b>O/U</b>: Over o Under 2.5. <b>GG/NG</b>: Gol/Gol o No Gol. <b>Esatto</b>: il risultato esatto tra i 3 più probabili.</p>'+
+    '<p class="note">Sembrano numeri bassi, ma sono il massimo che il calcio permette: ci sono tre esiti possibili e tanta casualità. I pronostici partono dalle quote dei bookmaker corrette sul passato, e nessuno fa stabilmente meglio: su '+V.n.toLocaleString("it-IT")+' partite il favorito ha vinto il '+n2(100*V.acc1x2,1)+'% delle volte e il risultato esatto più probabile è uscito il '+n2(100*V.esatto1,1)+'%. Per questo conta la percentuale di ogni singolo pronostico, non la media: un\'uscita al 75% esce circa 3 volte su 4.</p>';
   // numeri dei campionati
   const per=STATO.per, k=STATO.num, nm=PV.num, lab=(MET_NUM.find(x=>x[0]===k)||MET_NUM[0])[1];
   const L2=Object.keys(nm).filter(l=>nm[l][per]).sort((a,b)=>nm[b][per][k]-nm[a][per][k]), v2=L2.map(l=>nm[l][per][k]);
@@ -1292,10 +1292,9 @@ function schermoConfronto(){
   const vv=T.map(val), riga=t=>barraRiga(esc(t),esc(nomeComp(sq[t].l))+' · '+sq[t].n+' partite',val(t),Math.min(...vv),Math.max(...vv),fmtS(t),"var(--pick)");
   const sqH='<div class="card" style="padding:4px 12px"><div class="tiny muted" style="padding-top:8px">Le più fedeli</div>'+T.slice(0,10).map(riga).join("")+'</div>'+
     (T.length>15?'<div class="card" style="padding:4px 12px;margin-top:8px"><div class="tiny muted" style="padding-top:8px">Le meno fedeli</div>'+T.slice(-5).reverse().map(riga).join("")+'</div>':"")+
-    '<p class="note">'+(ms[0]==="dgf"?"Gol fatti a partita meno quelli attesi dal modello.":ms[0]==="dgs"?"Gol subiti a partita meno quelli attesi: in alto chi subisce meno del previsto.":"Quante volte è uscito "+(MET_PV.find(x=>x[0]===ms[0])||MET_PV[0])[2]+".")+' Stagioni '+PV.stag_s[0]+' – '+PV.stag_s[PV.stag_s.length-1]+', solo squadre con almeno 30 partite.</p>';
+    '<p class="note">'+(ms[0]==="dgf"?"Gol fatti a partita meno quelli attesi prima della partita.":ms[0]==="dgs"?"Gol subiti a partita meno quelli attesi: in alto chi subisce meno del previsto.":"Quante volte è uscito "+(MET_PV.find(x=>x[0]===ms[0])||MET_PV[0])[2]+".")+' Stagioni '+PV.stag_s[0]+' – '+PV.stag_s[PV.stag_s.length-1]+', solo squadre con almeno 30 partite.</p>';
   h+='<div class="sec">Le squadre che rispettano i pronostici</div>'+chipsDi(legheSq.map(l=>[l,l==="Tutti"?"Tutti":nomeComp(l)]),STATO.sqL,"sql")+chipsDi(MET_SQ.map(x=>[x[0],x[1]]),ms[0],"sqm")+premium(sqH,"prev");
   box.innerHTML=h;
-  box.querySelectorAll("[data-pv]").forEach(b=>b.addEventListener("click",()=>{ STATO.pv=b.dataset.pv; schermoConfronto(); }));
   box.querySelectorAll("[data-num]").forEach(b=>b.addEventListener("click",()=>{ STATO.num=b.dataset.num; schermoConfronto(); }));
   box.querySelectorAll("[data-per]").forEach(b=>b.addEventListener("click",()=>{ STATO.per=b.dataset.per; schermoConfronto(); }));
   box.querySelectorAll("[data-sql]").forEach(b=>b.addEventListener("click",()=>{ STATO.sqL=b.dataset.sql; schermoConfronto(); }));
@@ -1420,7 +1419,7 @@ function schedaAllenatore(nome){
     (c.eu?'<p class="note">In coppa europea: <b>'+c.eu[0]+'</b> partite, '+c.eu[1]+'% vittorie, '+c.eu[2]+'% pareggi, '+c.eu[3]+' gol fatti e '+c.eu[4]+' subiti a partita.</p>':"")+
     '<div class="sec">Squadra per squadra</div><div class="card" style="padding:6px 10px"><div class="tbl-w"><table class="num"><thead><tr><th style="text-align:left">Squadra</th><th>Partite</th><th>V%</th><th>Gol</th><th>Periodo</th></tr></thead><tbody>'+
       c.squadre.map(x=>'<tr><td class="tn" style="text-align:left">'+esc(x[0])+'</td><td>'+x[1]+'</td><td>'+x[2]+'</td><td>'+x[5]+'–'+x[6]+'</td><td class="tiny">'+x[7].slice(0,4)+'–'+x[8].slice(0,4)+'</td></tr>').join("")+'</tbody></table></div></div>',"carriera")+
-    '<p class="note">Fonte panchine: Wikipedia (tabelle cambi allenatore, 10 stagioni). Fonte partite: football-data.co.uk. Ogni partita è attribuita all\'allenatore in carica quel giorno; se non è certo chi fosse in panchina, la partita non viene contata.</p>'+
+    '<p class="note">Partite contate: Serie A e B, Premier e Championship, Bundesliga e 2. Bundesliga, Liga e Liga 2, Ligue 1 e 2, Portogallo, Olanda, Belgio, Turchia, Grecia e Scozia, ultime 10 stagioni (Serie C, campionati minori e giovanili non ci sono). Fonte panchine: Wikipedia. Fonte partite: football-data.co.uk. Ogni partita è attribuita all\'allenatore in carica quel giorno; se non è certo chi fosse in panchina, la partita non viene contata.</p>'+
     '<p class="foot">Gioca responsabilmente · 18+</p></div></div>';
   $("bk").onclick=chiudi; }
 
