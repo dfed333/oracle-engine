@@ -44,7 +44,8 @@ i numeri veri di ogni allenatore. Si aggiorna da sola due volte al giorno.
 | Dato | Fonte |
 |---|---|
 | Partite con risultati, tiri, angoli, cartellini, falli, xG e quote pre-partita (10 stagioni, 13 campionati + Serie B, Championship, 2. Bundesliga solo per lo storico) | football-data.co.uk |
-| Quote delle partite in arrivo (solo per calcolare le probabilità, mai mostrate) | football-data.co.uk (fixtures.csv) |
+| Quote delle partite in arrivo (solo per calcolare le probabilità, mai mostrate) | football-data.co.uk (fixtures.csv, martedì e venerdì); ESPN (pagine pubbliche dei risultati: quote di un bookmaker aggiornate fino al calcio d'inizio, anche per le coppe) |
+| Risultati appena finiti | ESPN (pagine pubbliche dei risultati, nessuna chiave), confrontati con le altre fonti |
 | Calendari e risultati della stagione, storico delle coppe europee | fixturedownload.com |
 | Allenatori in carica e storico dei cambi panchina | Wikipedia (tabelle "Personnel" e "Managerial changes") |
 | Arbitri: storico 2012-2026, cartellini, rigori (11 campionati + 3 coppe) | transfermarkt-datasets (archivio pubblico) |
@@ -107,6 +108,12 @@ senza le giocate quasi scontate (Over 0.5, Under 4.5, Multigol 1-5, 1-6, 2-6); v
 sul passato con le stesse regole.
 
 ## Aggiornamento
+
+Ogni ora dalle ~12 all'~1 di notte (ora italiana) e alle ~6:30: risultati appena finiti e quote
+aggiornate (`espn.py`). Le quote più vicine al calcio d'inizio sono preferite a quelle di
+football-data: verificato su 39.700 partite, le quote di chiusura indovinano più di quelle di 1-2
+giorni prima (favorito 51,4% contro 51,1%, Over/Under 58,4% contro 57,9%), anche con un solo
+bookmaker. Le pagine ESPN sono pubbliche ma non ufficiali: se non rispondono l'app usa le altre fonti.
 
 Facoltativo: la chiave gratuita di football-data.org (registrazione con la sola email)
 va messa nei "secrets" del repository con il nome `FOOTBALL_DATA_KEY`: aggiunge gli

@@ -136,11 +136,18 @@ def main():
     log("5/7 calendario e risultati della finestra…")
     finestra = sorgenti.partite_finestra(ab, partite)
     for f in finestra:
-        if f.get("q"):
-            lh, la = cache_gol.get(f["q"], mercato.rho_di(leghe, f["comp"]))
+        rho = mercato.rho_di(leghe, f["comp"]) if f["comp"] in leghe else rho_c.get(f["comp"], -0.05)
+        qe = f.pop("qe", None)
+        if qe:                                   # quote più vicine al calcio d'inizio (ESPN): le più affidabili
+            lh, la = cache_gol.get(qe[:4], rho, qe[4])
+            o25 = qe[3] if qe[4] == 2.5 else verifica.probabilita(mercato.matrice(lh, la, rho))["O25"]
+            f["q"] = [qe[0], qe[1], qe[2], round(o25, 5), lh, la]
+        elif f.get("q"):
+            lh, la = cache_gol.get(f["q"], rho)
             f["q"] = list(f["q"]) + [lh, la]
     cache_gol.salva()
-    log("    partite in finestra:", len(finestra), "· con le attese del mercato:", sum(1 for f in finestra if f.get("q")))
+    log("    partite in finestra:", len(finestra), "· con le attese del mercato:", sum(1 for f in finestra if f.get("q")),
+        "· ESPN:", sorgenti.CONTROLLO.get("espn"))
     log("    arbitri: storico, stagione in corso e designati…")
     try:
         AR, designati, diag_arb = arbitri.costruisci(partite, finestra, oggi, log=log)

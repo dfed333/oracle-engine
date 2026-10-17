@@ -965,7 +965,7 @@ function barreFasce(r){ const f=fasceGol(r.P), lab=["0","1","2","3","4","5+"], m
   const multi=f[2]+f[3]+f[4];
   return '<div class="sec" style="margin-top:12px">Quanti gol in totale</div>'+
     f.map((v,i)=>'<div class="row small" style="margin:4px 0"><span class="num" style="width:26px;font-weight:700">'+lab[i]+'</span><div class="bar" style="flex:1;height:14px;background:var(--sf3);border-radius:6px;overflow:hidden"><span style="display:block;height:100%;width:'+(100*v/mx).toFixed(1)+'%;background:var(--ac);opacity:'+(.35+.65*v/mx).toFixed(2)+'"></span></div><span class="num" style="width:46px;text-align:right;font-weight:700">'+pct(v)+'</span></div>').join("")+
-    '<p class="note">Multigol 2-4: <b>'+pct(multi)+'</b> · almeno 3 gol: <b>'+pct(f[3]+f[4]+f[5])+'</b> · gol attesi in totale '+(r.lamC+r.lamO).toFixed(2)+'.</p>'; }
+    '<p class="note">Ogni barra somma tutti i risultati con quei gol (2 gol = 2-0, 1-1, 0-2). Multigol 2-4: <b>'+pct(multi)+'</b> · almeno 3 gol: <b>'+pct(f[3]+f[4]+f[5])+'</b> · gol attesi in totale '+(r.lamC+r.lamO).toFixed(2)+'.</p>'; }
 function kp(k,v,lg,fmt,dir){ const d=lg==null?null:(v-lg)/Math.max(lg,1e-9);
   const cls=d==null||Math.abs(d)<.1?"":(d>0?"up":"dn");
   return '<div class="kp"><div class="k">'+k+'</div><div class="v num '+cls+'">'+fmt(v)+'</div>'+(lg!=null?'<div class="lg">media '+(dir||"lega")+': <b>'+fmt(lg)+'</b></div>':'<div class="lg">&nbsp;</div>')+'</div>'; }
@@ -1155,16 +1155,25 @@ function spiega(r){
   const d=golSquadra(r,fav), tre=d.slice(3).reduce((x,y)=>x+y,0);
   const top=r.celle.slice(0,3).map(c=>c[0]+"-"+c[1]).join(", ");
   righe.push("I risultati esatti più probabili sono "+top+" perché "+nf+" segna più spesso 1 o 2 gol (1 gol "+pc1(d[1])+", 2 gol "+pc1(d[2])+", 3 o più "+pc1(tre)+"): ogni singolo risultato esce circa 1 volta su 10. Messi insieme però contano di più: "+nf+" vince con 2 o più gol di scarto nel "+pc1(probCella(r,(i,j)=>(fav==="c"?i-j:j-i)>=2))+" dei casi.");
+  righe.push(sommaTotali(r));
   const imp=[impegni(f.c,f),impegni(f.o,f)].filter(Boolean);
   if(imp.length) righe.push(imp.join(" ")+" Le quote ne tengono già conto (stanchezza, turnover).");
   const fc=squadraForma(f.c), fo=squadraForma(f.o);
   if(fc||fo) righe.push("Ultime partite: "+(fc?f.c+" "+fc:"")+(fc&&fo?" · ":"")+(fo?f.o+" "+fo:"")+".");
   righe.push("Il pronostico più probabile è «"+a.pr.lab+"» al "+pc1(a.pr.p)+". Nessun pronostico è sicuro.");
   return righe; }
+/* "quanti gol in totale" somma più risultati esatti: per questo il numero di gol più probabile può non essere quello del risultato più probabile */
+function sommaTotali(r){
+  const fz=fasceGol(r.P); let k=0; for(let i=1;i<6;i++) if(fz[i]>fz[k]) k=i;
+  const top=r.celle[0], ktop=top[0]+top[1];
+  const parti=k<5?r.celle.filter(c=>c[0]+c[1]===k&&c[2]>=.005).map(c=>c[0]+"-"+c[1]+" "+pc1(c[2])):[];
+  const quanti=k<5?k+" gol":"5 o più gol";
+  if(k===ktop) return "Il numero di gol più probabile è "+quanti+" ("+pc1(fz[k])+").";
+  return "Attenzione: «"+quanti+" in totale» ("+pc1(fz[k])+") non è un risultato solo, è la somma di "+(k<5?parti.length+" risultati: "+parti.join(" + "):"tanti risultati (2-3, 1-4, 3-2, 0-5…), ognuno piccolo")+". Per questo il risultato esatto più probabile resta "+top[0]+"-"+top[1]+" ("+pc1(top[2])+"). Se vuoi giocare i gol, guarda i totali o i multigol: escono molto più spesso di qualsiasi risultato esatto."; }
 function aiutoChat(f){ return ["Puoi chiedermi, per esempio:","«"+f.o+" fa più di 2 gol?» · «Finisce 1-2?» · «Vince "+f.c+" e over 2.5?»","«Segnano entrambe?» · «Più di 9 angoli?» · «Quanti cartellini?» · «Perché questi risultati?»"]; }
 function rispondi(r,testo){
   const q=domandaNorm(testo), f=r.f;
-  if(/ (perche|come mai|spieg\w*|motivo|ragione) /.test(q)) return spiega(r);
+  if(/ (perche|come mai|spieg\w*|motivo|ragione) /.test(q)) return / (totale|totali|in totale|barre|quanti gol) /.test(q)?[sommaTotali(r)]:spiega(r);
   if(/ (consigl\w*|cosa gioc\w*|che gioc\w*|quale gioc\w*|pronostic\w*|cosa dicono) /.test(q)){ const a=affid(r);
     return ["Cosa dicono i numeri: «"+a.pr.lab+"» al "+pc1(a.pr.p)+" (dati "+r.dati.t+").","Le 3 uscite più probabili: "+r.picks.slice(0,3).map(x=>x[0]+" "+pc1(x[1])).join(" · ")+".","Nessun pronostico è sicuro. Gioca responsabilmente (18+)."]; }
   if(/ (chi vince|chi vincera|vincitore|1x2) /.test(q)) return [f.c+" "+pc1(r.p1)+" · pareggio "+pc1(r.px)+" · "+f.o+" "+pc1(r.p2)+"."];

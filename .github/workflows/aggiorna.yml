@@ -1,12 +1,12 @@
 # Oracle Engine — aggiornamento automatico
-# Ogni mattina e ogni sera riscarica partite, calendari, risultati e allenatori,
-# ricalcola il modello e pubblica la nuova versione dell'app.
+# Ogni ora (dalle 12 all'1 di notte) e la mattina presto riscarica partite, calendari, risultati, quote e
+# allenatori, ricalcola il modello e pubblica la nuova versione dell'app.
 name: Aggiorna Oracle Engine
 
 on:
   schedule:
-    - cron: "30 4 * * *"    # ~06:30 in Italia: calendari e cambi panchina della notte
-    - cron: "30 22 * * *"   # ~00:30 in Italia: risultati e statistiche della giornata
+    - cron: "30 4 * * *"      # ~06:30 in Italia: calendari e cambi panchina della notte
+    - cron: "15 10-23 * * *"  # ogni ora dalle ~12 all'~1 di notte: risultati appena finiti e quote aggiornate
   workflow_dispatch:         # pulsante "Run workflow" per aggiornare subito
   push:
     branches: [main]

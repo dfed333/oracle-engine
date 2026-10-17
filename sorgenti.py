@@ -129,6 +129,7 @@ def chiave(s):
 # nomi esterni → nome nel database (chiavi già normalizzate con norm())
 ALIAS_SQUADRE = {
     "v entella": "Virtus Entella", "peterborough united": "Peterboro", "queens park rangers": "QPR",
+    "real sociedad ii": "Sociedad B", "real sociedad b": "Sociedad B", "amed sfk": "Amedspor",
     "internazionale": "Inter", "inter milan": "Inter", "fc internazionale milano": "Inter",
     "ac milan": "Milan", "hellas verona": "Verona", "ss lazio": "Lazio", "as roma": "Roma",
     "spurs": "Tottenham", "tottenham hotspur": "Tottenham",
@@ -671,13 +672,13 @@ def partite_finestra(abbinatore, partite_db, giorni_prima=4, giorni_dopo=12):
         out.append(f)
 
     for lega, slug in LEGHE_CALENDARIO.items():
-        for r in json_calendario(slug, anno, max_ore=3):
+        for r in json_calendario(slug, anno, max_ore=0.75):
             t = _t_utc(r)
             if t and da <= datetime.date.fromisoformat(t[:10]) <= a:
                 aggiungi(lega, lega, t, r.get("HomeTeam"), r.get("AwayTeam"),
                          r.get("HomeTeamScore"), r.get("AwayTeamScore"), r.get("RoundNumber"))
     for slug, nome in engine.COPPE_FD.items():
-        for r in json_calendario(slug, anno, max_ore=3):
+        for r in json_calendario(slug, anno, max_ore=0.75):
             t = _t_utc(r)
             if t and da <= datetime.date.fromisoformat(t[:10]) <= a:
                 aggiungi(nome, None, t, r.get("HomeTeam"), r.get("AwayTeam"),
@@ -697,8 +698,69 @@ def partite_finestra(abbinatore, partite_db, giorni_prima=4, giorni_dopo=12):
     for m in partite_db:
         if m["lega"] not in coperte and m["lega"] in engine.LEGHE_FD.values() and da <= m["data"] <= oggi:
             aggiungi(m["lega"], m["lega"], m["data"].isoformat() + "T15:00:00Z", m["casa"], m["ospite"], m["gc"], m["go"])
+    unisci_espn(out, abbinatore, da, a, aggiungi)
     out.sort(key=lambda f: (f["t"], f["comp"], f["c"]))
     return out
+
+
+def unisci_espn(out, abbinatore, da, a, aggiungi):
+    """
+    Risultati appena finiti e quote fresche da ESPN (vedi espn.py): un risultato si aggiunge solo se le altre fonti
+    non lo hanno ancora (se lo hanno, si confrontano); le quote vanno in f["qe"] e build.py le preferisce a quelle di
+    football-data perché più vicine al calcio d'inizio. Per i campionati senza calendario completo (Belgio, Grecia,
+    Liga 2) si aggiungono anche le partite che mancano.
+    """
+    try:
+        import espn
+        eventi = espn.partite()
+    except Exception as e:                      # fonte in più: se non risponde, l'app esce lo stesso
+        CONTROLLO["espn"] = {"errore": f"{type(e).__name__}: {e}"}
+        return
+    idx = defaultdict(list)
+    for f in out:
+        idx[(f["comp"], f["t"][:10])].append(f)
+    confronti, diversi, nuove, abbinate = 0, [], 0, 0
+
+    def nome(raw, comp):
+        raw = engine.FD_RENAME.get(raw, raw)
+        if comp in engine.LEGHE_FD.values():
+            return abbinatore.trova(raw, comp)
+        return abbinatore.trova(raw, None, fuzzy=False) or abbinatore.nome_coppa(raw)
+
+    for p in eventi:
+        c, o = nome(p["casa"], p["comp"]), nome(p["ospite"], p["comp"])
+        if not c or not o:
+            continue
+        d = datetime.date.fromisoformat(p["t"][:10])
+        # una squadra gioca una sola partita al giorno per competizione: basta che coincida una delle due (stessa
+        # posizione, casa o trasferta) e la data; le squadre fuori archivio hanno nomi diversi tra le fonti
+        f = None
+        for dd in (d, d - datetime.timedelta(days=1), d + datetime.timedelta(days=1)):
+            cand = idx.get((p["comp"], dd.isoformat()), [])
+            f = next((x for x in cand if x["c"] == c and x["o"] == o), None) or \
+                next((x for x in cand if (x["c"] == c and not x.get("cx")) or (x["o"] == o and not x.get("ox"))), None)
+            if f:
+                break
+        if not f:
+            if p["comp"] in engine.LEGHE_FD.values() and p["comp"] not in LEGHE_CALENDARIO and da <= d <= a:
+                n0 = len(out)
+                aggiungi(p["comp"], p["comp"], p["t"], c, o, *(p["r"] if p.get("finita") else (None, None)))
+                if len(out) > n0:
+                    f = out[-1]; nuove += 1
+            if not f:
+                continue
+        abbinate += 1
+        if p.get("finita"):
+            if "r" in f:
+                confronti += 1
+                if list(f["r"]) != p["r"]:
+                    diversi.append([p["comp"], d.isoformat(), c, o, "%d-%d" % tuple(f["r"]), "%d-%d" % tuple(p["r"])])
+            else:
+                f["r"] = p["r"]
+        if p.get("q"):
+            f["qe"] = p["q"]
+    CONTROLLO["espn"] = dict(espn.DIAG, abbinate=abbinate, aggiunte=nuove, risultati_confrontati=confronti,
+                             risultati_diversi=diversi[:20])
 
 
 def _unifica_nomi_coppa(ultimo_anno):

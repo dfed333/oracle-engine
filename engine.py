@@ -57,6 +57,7 @@ import os
 import random
 import sys
 import unicodedata
+import time
 import urllib.request
 from collections import Counter, defaultdict
 from statistics import median, mean
@@ -550,11 +551,12 @@ def _codici_stagioni(n=N_STAGIONI):
     return [f"{a % 100:02d}{(a + 1) % 100:02d}" for a in range(inizio - n + 1, inizio + 1)]
 
 
-def _scarica_csv(codice_stagione, divisione, usa_cache=True):
-    """Scarica un CSV (o lo legge dalla cache locale). Ritorna il testo o None."""
+def _scarica_csv(codice_stagione, divisione, usa_cache=True, max_ore=None):
+    """Scarica un CSV (o lo legge dalla cache locale, se più giovane di max_ore). Ritorna il testo o None."""
     os.makedirs(CARTELLA_CACHE, exist_ok=True)
     percorso = os.path.join(CARTELLA_CACHE, f"{divisione}_{codice_stagione}.csv")
-    if usa_cache and os.path.exists(percorso):
+    giovane = max_ore is not None and os.path.exists(percorso) and (time.time() - os.path.getmtime(percorso)) / 3600 < max_ore
+    if (usa_cache or giovane) and os.path.exists(percorso):
         with open(percorso, "rb") as f:
             return f.read().decode("utf-8-sig", errors="replace")
     url = f"https://football-data.co.uk/mmz4281/{codice_stagione}/{divisione}.csv"
@@ -644,8 +646,8 @@ def carica_partite():
 
     for div, lega in list(LEGHE_FD.items()) + list(LEGHE_STORIA.items()):
         for cod in stagioni:
-            # la stagione più recente viene sempre riscaricata (si aggiorna di settimana in settimana)
-            testo = _scarica_csv(cod, div, usa_cache=(cod != stagioni[-1]))
+            # la stagione più recente si riscarica (la fonte la aggiorna una o due volte a settimana: basta ogni 2 ore)
+            testo = _scarica_csv(cod, div, usa_cache=(cod != stagioni[-1]), max_ore=2)
             if not testo:
                 continue
             for riga in csv.DictReader(io.StringIO(testo)):

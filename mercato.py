@@ -44,7 +44,7 @@ def matrice(lc, lo, rho, n=11):
     return [[v / t for v in r] for r in P]
 
 
-def _p12o(lc, lo, rho):
+def _p12o(lc, lo, rho, linea=2.5):
     P = matrice(lc, lo, rho)
     p1 = p2 = o = 0.0
     for i in range(11):
@@ -54,23 +54,23 @@ def _p12o(lc, lo, rho):
                 p1 += v
             elif i < j:
                 p2 += v
-            if i + j > 2:
+            if i + j > linea:
                 o += v
     return p1, p2, o
 
 
-def gol_attesi(q, rho, partenza=(1.4, 1.1)):
+def gol_attesi(q, rho, partenza=(1.4, 1.1), linea=2.5):
     """
-    Gol attesi (casa, ospite) che riproducono le attese del mercato q = [p1, pX, p2, pOver2.5]
-    (minimi quadrati su 1, 2 e Over 2.5, Gauss-Newton in scala logaritmica).
+    Gol attesi (casa, ospite) che riproducono le attese del mercato q = [p1, pX, p2, pOver(linea)]
+    (minimi quadrati su 1, 2 e Over, Gauss-Newton in scala logaritmica).
     """
     t1, t2, to = q[0], q[2], q[3]
     a, b = math.log(max(partenza[0], .2)), math.log(max(partenza[1], .2))
     h = 1e-4
     for _ in range(30):
-        r0 = [x - y for x, y in zip(_p12o(math.exp(a), math.exp(b), rho), (t1, t2, to))]
-        ra = [x - y for x, y in zip(_p12o(math.exp(a + h), math.exp(b), rho), (t1, t2, to))]
-        rb = [x - y for x, y in zip(_p12o(math.exp(a), math.exp(b + h), rho), (t1, t2, to))]
+        r0 = [x - y for x, y in zip(_p12o(math.exp(a), math.exp(b), rho, linea), (t1, t2, to))]
+        ra = [x - y for x, y in zip(_p12o(math.exp(a + h), math.exp(b), rho, linea), (t1, t2, to))]
+        rb = [x - y for x, y in zip(_p12o(math.exp(a), math.exp(b + h), rho, linea), (t1, t2, to))]
         J = [[(ra[i] - r0[i]) / h, (rb[i] - r0[i]) / h] for i in range(3)]
         A00 = sum(J[i][0] ** 2 for i in range(3)); A11 = sum(J[i][1] ** 2 for i in range(3))
         A01 = sum(J[i][0] * J[i][1] for i in range(3))
@@ -99,11 +99,11 @@ class CacheGol:
             self.d = {}
         self.nuovi = 0
 
-    def get(self, q, rho):
-        k = "%.5f|%.5f|%.5f|%.5f|%.3f" % (q[0], q[1], q[2], q[3], rho)
+    def get(self, q, rho, linea=2.5):
+        k = "%.5f|%.5f|%.5f|%.5f|%.3f" % (q[0], q[1], q[2], q[3], rho) + ("" if linea == 2.5 else "|%.1f" % linea)
         v = self.d.get(k)
         if v is None:
-            v = [round(x, 5) for x in gol_attesi(q, rho)]
+            v = [round(x, 5) for x in gol_attesi(q, rho, linea=linea)]
             self.d[k] = v
             self.nuovi += 1
         return v
